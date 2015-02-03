@@ -293,6 +293,7 @@ cl_float HMM::g(int t,int k,int i,int m,int n)
 
 cl_float HMM::calcBaumWelñh(int n)
 {
+	std::fstream f; // debug
 	int T1=T-1;
 
 	cl_float * gam_sum = new cl_float[N];
@@ -345,6 +346,18 @@ cl_float HMM::calcBaumWelñh(int n)
 				}
 		}
 
+		// DEBUG - gam_sum, gamd_sum - no error
+		/*std::fstream f;
+		f.open("debugging_gam_sum.txt",std::fstream::out);
+		for (int i=0; i<N; i++)
+		f << gam_sum[i] << std::endl;
+		f.close();
+		f.open("debugging_gamd_sum.txt", std::fstream::out);
+		for (int i=0; i<N*M; i++)
+			f << gamd_sum[i] << std::endl;
+		f.close();*/
+		// DEBUG
+
 		/*if(!F) 
 			break;*/
 
@@ -359,6 +372,13 @@ cl_float HMM::calcBaumWelñh(int n)
 			}
 			PI[i]/=K;
 		}
+
+		// DEBUG - PI - good
+		/*f.open("debugging_PI.txt",std::fstream::out);
+		for (int i=0; i<N; i++)
+		f << PI[i] << std::endl;
+		f.close();*/
+		// DEBUG
 		
 		// êåðíåë 3.4
 		for(int i=0;i<N;i++)
@@ -373,10 +393,24 @@ cl_float HMM::calcBaumWelñh(int n)
 			}
 		}
 
+		// DEBUG - A - good
+		/*f.open("debugging_A.txt", std::fstream::out);
+		for (int i = 0; i<N*N; i++)
+			f << A[i] << std::endl;
+		f.close();*/
+		// DEBUG
+
 		// êåðíåë 3.5
 		for(int i=0;i<N;i++)
 			for(int m=0;m<M;m++)
 				TAU(i,m)=gamd_sum[i*M+m]/gam_sum[i];
+
+		// DEBUG - TAU - good
+		/*f.open("debugging_TAU.txt", std::fstream::out);
+		for (int i = 0; i<N*M; i++)
+			f << TAU[i] << std::endl;
+		f.close();*/
+		// DEBUG
 		
 		// êåðíåë 3.6
 		for(int i=0;i<N;i++)
@@ -397,6 +431,13 @@ cl_float HMM::calcBaumWelñh(int n)
 					MU(z,i,m)/=gamd_sum[i*M+m];
 				}
 		}
+
+		// DEBUG - MU - good
+		/*f.open("debugging_MU.txt", std::fstream::out);
+		for (int i = 0; i<N*M*Z; i++)
+			f << MU[i] << std::endl;
+		f.close();*/
+		// DEBUG
 
 		// êåðíåë 3.7
 		for(int i=0;i<N;i++)
@@ -420,6 +461,13 @@ cl_float HMM::calcBaumWelñh(int n)
 							SIG(z1,z2,i,m)/=gamd_sum[i*M+m];
 					}
 		}
+
+		// DEBUG - SIG - good
+		/*f.open("debugging_SIG.txt", std::fstream::out);
+		for (int i = 0; i<N*M*Z*Z; i++)
+			f << SIG[i] << std::endl;
+		f.close();*/
+		// DEBUG
 		
 		// êåðíåë 3.8
 		for(int i=0;i<N;i++)
@@ -491,11 +539,13 @@ void HMM::internal_calculations(int n)
 					B(i,t,k)=0;
 			}
 
+	// DEBUG
 	/*std::fstream f;
 	f.open("debugging_B.txt",std::fstream::out);
 	for (int i=0; i<N*T*K; i++)
 		f << B[i] << std::endl;
 	f.close();*/
+	// DEBUG
 
 	// êåðíåë 2.1 (set_var)
 	cl_float atsum=0.,P=0.;
@@ -513,6 +563,7 @@ void HMM::internal_calculations(int n)
 			}
 		}
 	}
+
 	// êåðíåë 2.2 (set_var)
 	for(int k=0;k<K;k++)
 	{
@@ -522,8 +573,6 @@ void HMM::internal_calculations(int n)
 			bet(T1,i,k)=1.;
 		}
 	}
-
-	
 
 	// êåðíåë 2.3 (set_var)
 	for(int t=0;t<T1;t++)
@@ -555,8 +604,9 @@ void HMM::internal_calculations(int n)
 		}
 	}
 	
-	// DEBUG 
-	/*f.open("debugging_alf.txt",std::fstream::out);
+	// DEBUG - satisfying
+	/*std::fstream f;
+	f.open("debugging_alf.txt",std::fstream::out);
 	for (cl_int i=0; i<N*T*K; i++)
 		f << alf[i] << std::endl;
 	f.close();
@@ -566,6 +616,7 @@ void HMM::internal_calculations(int n)
 	f.close();*/
 	// DEBUG
 
+	// 2.3.3
 	// T - T1
 	for(int t=0;t<T1;t++)
 	{	
@@ -612,6 +663,14 @@ void HMM::internal_calculations(int n)
 			P+=alf(T1,i,k);
 		}
 	}
+
+	// DEBUG c - satisfying
+	/*std::fstream f;
+	f.open("debugging_c.txt",std::fstream::out);
+	for (cl_int i=0; i<T*K; i++)
+	f << c[i] << std::endl;
+	f.close();*/
+	// DEBUG
 	
 	// ïðîâåðêà
 	if(abs(P-1.)>=0.1)
@@ -638,6 +697,18 @@ void HMM::internal_calculations(int n)
 		}
 	}
 
+	// DEBUG bet, bet_t - satisfying
+	/*std::fstream f;
+	f.open("debugging_bet.txt", std::fstream::out);
+	for (cl_int i = 0; i<N*T*K; i++)
+		f << bet[i] << std::endl;
+	f.close();
+	f.open("debugging_bet_t.txt", std::fstream::out);
+	for (cl_int i = 0; i<N*T*K; i++)
+		f << bet_t[i] << std::endl;
+	f.close();*/
+	// DEBUG
+
 	//ïðîâåðêà! (set_var)
 	for(int k=0;k<K;k++)
 	{
@@ -651,6 +722,7 @@ void HMM::internal_calculations(int n)
 
 		}
 	}
+	
 	
 
 	// êåðíåë 2.6 (set_var)
@@ -674,6 +746,18 @@ void HMM::internal_calculations(int n)
 			}
 		}
 	}
+
+	// DEBUG gam, gamd - satisfying
+	/*std::fstream f;
+	f.open("debugging_gam.txt", std::fstream::out);
+	for (cl_int i = 0; i<N*T*K; i++)
+	f << gam[i] << std::endl;
+	f.close();
+	f.open("debugging_gamd.txt", std::fstream::out);
+	for (cl_int i = 0; i<N*M*T*K; i++)
+	f << gamd[i] << std::endl;
+	f.close();*/
+	// DEBUG
 
 	// ÏÐÎÂÎÅÐÊÀ ?? 
 	for(int k=0;k<K;k++)
@@ -700,8 +784,16 @@ void HMM::internal_calculations(int n)
 		}
 	}
 
+	// DEBUG ksi - satisfying
+	/*std::fstream f;
+	f.open("debugging_ksi.txt", std::fstream::out);
+	for (cl_int i = 0; i<N*N*T1*K; i++)
+		f << ksi[i] << std::endl;
+	f.close();*/
+	// DEBUG
+
 	//  ÏÐÎÂÅÐÊÀ ?? 
-	for(int k=0;k<K;k++)
+	/*for(int k=0;k<K;k++)
 	{
 		for(int i=0;i<N;i++)
 			for(int t=0;t<T1;t++)
@@ -710,7 +802,7 @@ void HMM::internal_calculations(int n)
 				for(int j=0;j<N;j++)
 					atsum+=ksi(t,i,j,k);
 			}
-	}
+	}*/
 }
 
 cl_float HMM::calcProbability()
