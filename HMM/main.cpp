@@ -91,6 +91,7 @@ int main(void)
 	cl_float succ1,fail1,succ2,fail2;
 	classClassify(p1_1,p1_2,succ1,fail1,K);
 	classClassify(p2_1,p2_2,fail2,succ2,K);
+	std::cout << (succ1 + succ2)*0.5;
 	std::fstream f;
 	f.open("ClassClassify.txt",std::fstream::out);
 	f<<(succ1+succ2)*0.5;

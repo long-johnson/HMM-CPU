@@ -672,12 +672,12 @@ void HMM::internal_calculations(int n)
 	f.close();*/
 	// DEBUG
 	
-	// проверка
-	if(abs(P-1.)>=0.1)
+	// DEBUG проверка
+	/*if(abs(P-1.)>=0.1)
 	{
 		std::cout<<"error!!!!! p<>1!!!!\n";
 		std::cout << std::endl;
-	}
+	}*/
 
 	// кернел 2.5 (set_var)
 	
@@ -710,7 +710,7 @@ void HMM::internal_calculations(int n)
 	// DEBUG
 
 	//проверка! (set_var)
-	for(int k=0;k<K;k++)
+	/*for(int k=0;k<K;k++)
 	{
 		for(int t=0;t<T;t++)
 		{
@@ -721,7 +721,7 @@ void HMM::internal_calculations(int n)
 				std::cout<<"error!!!!\n";
 
 		}
-	}
+	}*/
 	
 	
 
@@ -733,8 +733,8 @@ void HMM::internal_calculations(int n)
 			for(int i=0;i<N;i++)
 			{
 				gam(t,i,k)=alf(t,i,k)*bet(t,i,k);
-				if(!_finite(gam(t,i,k)))	// проверка
-					std::cout<<"gamma\n";
+				/*if(!_finite(gam(t,i,k)))	// проверка
+					std::cout<<"gamma\n";*/
 				atsum=0.;
 				for(int m=0;m<M;m++)
 					atsum+=TAU_used(i,m)*g(t,k,i,m,n);
@@ -760,7 +760,7 @@ void HMM::internal_calculations(int n)
 	// DEBUG
 
 	// ПРОВОЕРКА ?? 
-	for(int k=0;k<K;k++)
+	/*for(int k=0;k<K;k++)
 	{
 		for(int i=0;i<N;i++)
 			for(int t=0;t<T;t++)
@@ -771,7 +771,7 @@ void HMM::internal_calculations(int n)
 				if(abs(atsum-gam(t,i,k))>=0.01)
 					std::cout<<"error!!!\n";
 			}
-	}
+	}*/
 
 	// кернел 2.7 (set_var)
 	for(int k=0;k<K;k++)
