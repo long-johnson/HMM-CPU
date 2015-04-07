@@ -679,130 +679,135 @@ void HMM::internal_calculations(int n)
 		std::cout << std::endl;
 	}*/
 
+	///
+	/// Далее вычисления только для этапа обучения
+	///
 	// кернел 2.5 (set_var)
-	
-	for(int t=T1-1;t>=0;t--)
-	{
-		for(int k=0;k<K;k++)
+	if (n != -1){
+
+		for (int t = T1 - 1; t >= 0; t--)
 		{
-		
-			for(int i=0;i<N;i++)
-				bet_t(t+1,i,k)=c(t+1,k)*bet(t+1,i,k);
-			for(int i=0;i<N;i++){
-				for(int j=0;j<N;j++)
-					bet(t,i,k)+=A_used(i,j)*B(j,t+1,k)*bet_t(t+1,j,k);
-				if(alf(t,i,k)==1./N || fabs(alf(t,i,k)-1.)<0.01)
-					bet(t,i,k)=1.;
-			}
-		}
-	}
-
-	// DEBUG bet, bet_t - satisfying
-	/*std::fstream f;
-	f.open("debugging_bet.txt", std::fstream::out);
-	for (cl_int i = 0; i<N*T*K; i++)
-		f << bet[i] << std::endl;
-	f.close();
-	f.open("debugging_bet_t.txt", std::fstream::out);
-	for (cl_int i = 0; i<N*T*K; i++)
-		f << bet_t[i] << std::endl;
-	f.close();*/
-	// DEBUG
-
-	//проверка! (set_var)
-	/*for(int k=0;k<K;k++)
-	{
-		for(int t=0;t<T;t++)
-		{
-			atsum=0;
-			for (int i=0;i<N;i++)
-				atsum+=alf(t,i,k)*bet(t,i,k);
-			if(abs(atsum-1.)>=0.1)
-				std::cout<<"error!!!!\n";
-
-		}
-	}*/
-	
-	
-
-	// кернел 2.6 (set_var)
-	for(int k=0;k<K;k++)
-	{
-		for(int t=0;t<T;t++)
-		{
-			for(int i=0;i<N;i++)
+			for (int k = 0; k < K; k++)
 			{
-				gam(t,i,k)=alf(t,i,k)*bet(t,i,k);
-				/*if(!_finite(gam(t,i,k)))	// проверка
-					std::cout<<"gamma\n";*/
-				atsum=0.;
-				for(int m=0;m<M;m++)
-					atsum+=TAU_used(i,m)*g(t,k,i,m,n);
-				for(int m=0;m<M;m++){
-					gamd(t,i,m,k)=TAU_used(i,m)*g(t,k,i,m,n)*gam(t,i,k)/atsum;
-					if(!_finite(gamd(t,i,m,k)))
-						gamd(t,i,m,k)=TAU_used(i,m)*gam(t,i,k);
+
+				for (int i = 0; i < N; i++)
+					bet_t(t + 1, i, k) = c(t + 1, k)*bet(t + 1, i, k);
+				for (int i = 0; i < N; i++){
+					for (int j = 0; j < N; j++)
+						bet(t, i, k) += A_used(i, j)*B(j, t + 1, k)*bet_t(t + 1, j, k);
+					if (alf(t, i, k) == 1. / N || fabs(alf(t, i, k) - 1.) < 0.01)
+						bet(t, i, k) = 1.;
 				}
 			}
 		}
-	}
 
-	// DEBUG gam, gamd - satisfying
-	/*std::fstream f;
-	f.open("debugging_gam.txt", std::fstream::out);
-	for (cl_int i = 0; i<N*T*K; i++)
-	f << gam[i] << std::endl;
-	f.close();
-	f.open("debugging_gamd.txt", std::fstream::out);
-	for (cl_int i = 0; i<N*M*T*K; i++)
-	f << gamd[i] << std::endl;
-	f.close();*/
-	// DEBUG
+		// DEBUG bet, bet_t - satisfying
+		/*std::fstream f;
+		f.open("debugging_bet.txt", std::fstream::out);
+		for (cl_int i = 0; i<N*T*K; i++)
+		f << bet[i] << std::endl;
+		f.close();
+		f.open("debugging_bet_t.txt", std::fstream::out);
+		for (cl_int i = 0; i<N*T*K; i++)
+		f << bet_t[i] << std::endl;
+		f.close();*/
+		// DEBUG
 
-	// ПРОВОЕРКА ?? 
-	/*for(int k=0;k<K;k++)
-	{
-		for(int i=0;i<N;i++)
-			for(int t=0;t<T;t++)
+		//проверка! (set_var)
+		/*for(int k=0;k<K;k++)
+		{
+		for(int t=0;t<T;t++)
+		{
+		atsum=0;
+		for (int i=0;i<N;i++)
+		atsum+=alf(t,i,k)*bet(t,i,k);
+		if(abs(atsum-1.)>=0.1)
+		std::cout<<"error!!!!\n";
+
+		}
+		}*/
+
+
+
+		// кернел 2.6 (set_var)
+		for (int k = 0; k < K; k++)
+		{
+			for (int t = 0; t < T; t++)
 			{
-				atsum=0;
-				for(int m=0;m<M;m++)
-					atsum+=gamd(t,i,m,k);
-				if(abs(atsum-gam(t,i,k))>=0.01)
-					std::cout<<"error!!!\n";
+				for (int i = 0; i < N; i++)
+				{
+					gam(t, i, k) = alf(t, i, k)*bet(t, i, k);
+					/*if(!_finite(gam(t,i,k)))	// проверка
+						std::cout<<"gamma\n";*/
+					atsum = 0.;
+					for (int m = 0; m < M; m++)
+						atsum += TAU_used(i, m)*g(t, k, i, m, n);
+					for (int m = 0; m < M; m++){
+						gamd(t, i, m, k) = TAU_used(i, m)*g(t, k, i, m, n)*gam(t, i, k) / atsum;
+						if (!_finite(gamd(t, i, m, k)))
+							gamd(t, i, m, k) = TAU_used(i, m)*gam(t, i, k);
+					}
+				}
 			}
-	}*/
+		}
 
-	// кернел 2.7 (set_var)
-	for(int k=0;k<K;k++)
-	{	
+		// DEBUG gam, gamd - satisfying
+		/*std::fstream f;
+		f.open("debugging_gam.txt", std::fstream::out);
+		for (cl_int i = 0; i<N*T*K; i++)
+		f << gam[i] << std::endl;
+		f.close();
+		f.open("debugging_gamd.txt", std::fstream::out);
+		for (cl_int i = 0; i<N*M*T*K; i++)
+		f << gamd[i] << std::endl;
+		f.close();*/
+		// DEBUG
+
+		// ПРОВОЕРКА ?? 
+		/*for(int k=0;k<K;k++)
+		{
+		for(int i=0;i<N;i++)
+		for(int t=0;t<T;t++)
+		{
+		atsum=0;
+		for(int m=0;m<M;m++)
+		atsum+=gamd(t,i,m,k);
+		if(abs(atsum-gam(t,i,k))>=0.01)
+		std::cout<<"error!!!\n";
+		}
+		}*/
+
+		// кернел 2.7 (set_var)
+		for (int k = 0; k < K; k++)
+		{
+			for (int t = 0; t < T1; t++)
+			{
+				for (int i = 0; i < N; i++)
+					for (int j = 0; j < N; j++)
+						ksi(t, i, j, k) = alf(t, i, k)*A_used(i, j)*B(j, t + 1, k)*bet(t + 1, j, k);
+			}
+		}
+
+		// DEBUG ksi - satisfying
+		/*std::fstream f;
+		f.open("debugging_ksi.txt", std::fstream::out);
+		for (cl_int i = 0; i<N*N*T1*K; i++)
+		f << ksi[i] << std::endl;
+		f.close();*/
+		// DEBUG
+
+		//  ПРОВЕРКА ?? 
+		/*for(int k=0;k<K;k++)
+		{
+		for(int i=0;i<N;i++)
 		for(int t=0;t<T1;t++)
 		{
-			for(int i=0;i<N;i++)
-				for(int j=0;j<N;j++)
-					ksi(t,i,j,k)=alf(t,i,k)*A_used(i,j)*B(j,t+1,k)*bet(t+1,j,k);
+		atsum=0;
+		for(int j=0;j<N;j++)
+		atsum+=ksi(t,i,j,k);
 		}
+		}*/
 	}
-
-	// DEBUG ksi - satisfying
-	/*std::fstream f;
-	f.open("debugging_ksi.txt", std::fstream::out);
-	for (cl_int i = 0; i<N*N*T1*K; i++)
-		f << ksi[i] << std::endl;
-	f.close();*/
-	// DEBUG
-
-	//  ПРОВЕРКА ?? 
-	/*for(int k=0;k<K;k++)
-	{
-		for(int i=0;i<N;i++)
-			for(int t=0;t<T1;t++)
-			{
-				atsum=0;
-				for(int j=0;j<N;j++)
-					atsum+=ksi(t,i,j,k);
-			}
-	}*/
 }
 
 cl_float HMM::calcProbability()
