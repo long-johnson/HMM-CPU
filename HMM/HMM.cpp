@@ -1,15 +1,6 @@
+#pragma once
 #include "HMM.h"
 #include "fstream"
-
-// проверка ошибки
-inline void HMM::checkErr(cl_int err, const char * name)
-{
-	if (err != CL_SUCCESS) {
-		std::cerr << "ERROR: " << name
-		<< " (" << err << ")" << std::endl;
-		exit(EXIT_FAILURE);
-	}
-}
 
 HMM::HMM(std::string filename)
 {
@@ -19,30 +10,30 @@ HMM::HMM(std::string filename)
 	f.close();
 
 	//ВЫДЕЛЯЕМ ПАМЯТЬ ДЛЯ ПАРАМЕТРОВ СММ
-	PI = new cl_float[N];				// начальное распределение вероятностей
-	A = new cl_float[N*N];				// вероятности переходов
-	TAU = new cl_float[N*M];			
-	MU = new cl_float[N*M*Z];
-	SIG = new cl_float[N*M*Z*Z];
-	alf = new cl_float[T*N*K];
-	bet = new cl_float[T*N*K];
-	c = new cl_float[T*K];				// коэффициенты масштаба
-	ksi = new cl_float[(T-1)*N*N*K];	
-	gam = new cl_float[T*N*K];
-	gamd = new cl_float[T*N*M*K];
-	alf_t = new cl_float[T*N*K];
-	bet_t = new cl_float[T*N*K];
-	B = new cl_float[N*T*K];			// вероятности появления наблюдений
+	PI = new real_t[N];				// начальное распределение вероятностей
+	A = new real_t[N*N];				// вероятности переходов
+	TAU = new real_t[N*M];			
+	MU = new real_t[N*M*Z];
+	SIG = new real_t[N*M*Z*Z];
+	alf = new real_t[T*N*K];
+	bet = new real_t[T*N*K];
+	c = new real_t[T*K];				// коэффициенты масштаба
+	ksi = new real_t[(T-1)*N*N*K];	
+	gam = new real_t[T*N*K];
+	gamd = new real_t[T*N*M*K];
+	alf_t = new real_t[T*N*K];
+	bet_t = new real_t[T*N*K];
+	B = new real_t[N*T*K];			// вероятности появления наблюдений
 
 	//начальные приближения
-	A1 = new cl_float[N*N];
-	TAU1 = new cl_float[N*M];
-	MU1 = new cl_float[N*M*Z*NumInit];
-	SIG1 = new cl_float[N*M*Z*Z*NumInit];
-	PI1 = new cl_float[N];
-	MU1 = new cl_float[N*M*Z*NumInit];
-	SIG1 = new cl_float[N*M*Z*Z*NumInit];
-	Otr = new cl_float[T*Z*K];
+	A1 = new real_t[N*N];
+	TAU1 = new real_t[N*M];
+	MU1 = new real_t[N*M*Z*NumInit];
+	SIG1 = new real_t[N*M*Z*Z*NumInit];
+	PI1 = new real_t[N];
+	MU1 = new real_t[N*M*Z*NumInit];
+	SIG1 = new real_t[N*M*Z*Z*NumInit];
+	Otr = new real_t[T*Z*K];
 
 	f.open(filename+"PI1.txt",std::fstream::in);
 	for(int i=0;i<N;i++)
@@ -100,78 +91,8 @@ HMM::~HMM(void)
 	delete Otr; 
 }
 
-
-bool HMM::initializeOpenCL()
-{
-	// инициализация платформы
-	cl_int err;										// переменная с кодом ошибки
-	//cl::vector< cl::Platform > platformList;		// список платформ			
-	cl::Platform::get(&platformList);												//получим список доступных платформ
-	checkErr(platformList.size()!=0 ? CL_SUCCESS : -1, "cl::Platform::get");
-
-	// создание контекста
-	cl_context_properties cprops[3] = 
-		{CL_CONTEXT_PLATFORM, (cl_context_properties)(platformList[0])(), 0};		// зададим свойства для первой платформы
-	context = new cl::Context(CL_DEVICE_TYPE_GPU, cprops, NULL, NULL, &err);		// создадим контекст устройства с заданными свойствами
-	checkErr(err, "Context::Context()");
-
-	// получение устройств для контекста
-	devices = context->getInfo<CL_CONTEXT_DEVICES>();			// получение списка устройств для контеста
-	checkErr(devices.size() > 0 ? CL_SUCCESS : -1, "devices.size() > 0");
-
-	// загрузка исходного кода кернела и компиляция
-	std::ifstream file("kernels.cl");															// загрузка исходного кода кернела
-	checkErr(file.is_open() ? CL_SUCCESS:-1, "kernels.cl");
-	std::string prog1(std::istreambuf_iterator<char>(file),(std::istreambuf_iterator<char>()));		// запись кода в строку
-	file.close();
-	cl::Program::Sources sources; //sources(1, std::make_pair(prog1.c_str(), prog1.length()+1));;
-	sources.push_back(std::make_pair(prog1.c_str(), prog1.length()+1));				// переменная - пара: исходный код + длина кода
-	cl::Program program(*context, sources);						// переменная-программа для данного контекста
-	err = program.build(devices,"");							// построение исходного кода для всех устройств
-	// выведем ошибки компиляции, если таковые присутствуют
-	std::string buildLog;
-	program.getBuildInfo(devices[0],CL_PROGRAM_BUILD_LOG,&buildLog);
-	std::cerr << "build log:\n" << buildLog << std::endl;
-	checkErr(err, "Program::build()");
-	
-	// получение интерфейса для кернела
-	kernel = new cl::Kernel(program, "BaumWelch", &err);					// интерфейс для кернела под названием BaumWelch
-
-	// инициализация очереди
-	cl::CommandQueue * queue = new cl::CommandQueue(*context, devices[0], 0, &err);	// очередь команд для 0-го устройства
-	checkErr(err, "CommandQueue::CommandQueue()");
-
-	return true;
-}
-
-void HMM::showInfo()
-{
-	// узнаем об устройствах и кернеле
-	cl_uint maxComputeUnits;			// число вычислительных единиц
-	size_t maxWorkGroupSize;			// максимальный размер рабочей группы
-	size_t prefWorkGroupSizeMul;		// размер wavefront'a
-	cl_ulong localMemSize;
-	cl_ulong globalMemSize;
-	devices[0].getInfo(CL_DEVICE_MAX_COMPUTE_UNITS,&maxComputeUnits);
-	devices[0].getInfo(CL_DEVICE_MAX_WORK_GROUP_SIZE,&maxWorkGroupSize);
-	//size_t maxWorkItemSizes[3];
-	//devices[0].getInfo(CL_DEVICE_MAX_WORK_ITEM_SIZES,&maxWorkItemSizes);
-	//std::cerr << "maxWorkItemSizes=" << maxWorkItemSizes[0] << " " << maxWorkItemSizes[1] << " " << maxWorkItemSizes[2] << std::endl;
-	devices[0].getInfo(CL_DEVICE_LOCAL_MEM_SIZE,&localMemSize);
-	std::cerr << "localMemSize = " << localMemSize << " mb" << std::endl;
-	devices[0].getInfo(CL_DEVICE_GLOBAL_MEM_SIZE,&globalMemSize);
-	std::cerr << "globalMemSize = " << globalMemSize/1024/1024 << " mb" << std::endl;
-	size_t maxParameterSize;
-	devices[0].getInfo(CL_DEVICE_MAX_PARAMETER_SIZE,&maxParameterSize);
-	std::cerr << "maxParameterSize = " << maxParameterSize << " bytes" << std::endl;
-	// расширения
-	//std::string extensionsList;
-	//devices[i].getInfo(CL_DEVICE_EXTENSIONS,&extensionsList);		//TODO: включать cl_float, если такое расширение доступно
-	kernel->getWorkGroupInfo(devices[0],CL_KERNEL_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,&prefWorkGroupSizeMul);	
-}
-
 // вспомогательная функция
-void copyArray(cl_float * dest, cl_float * source, int n)
+void copyArray(real_t * dest, real_t * source, int n)
 {
 	for(int i=0; i<n; i++)
 		dest[i]=source[i];
@@ -181,12 +102,12 @@ void HMM::findModelParameters()
 {
 	using namespace std;
 	// выполним Баума Велша для всех начальных приближений и выбираем лучший набор параметров
-	cl_float p, p0 = -1000000000000000.;
-	cl_float * PIw = new cl_float[N];
-	cl_float * Aw = new cl_float[N*N]; 
-	cl_float * TAUw = new cl_float[N*M];
-	cl_float * MUw = new cl_float[Z*N*M];
-	cl_float * SIGw = new cl_float[Z*Z*N*M];
+	real_t p, p0 = -1000000000000000.;
+	real_t * PIw = new real_t[N];
+	real_t * Aw = new real_t[N*N]; 
+	real_t * TAUw = new real_t[N*M];
+	real_t * MUw = new real_t[Z*N*M];
+	real_t * SIGw = new real_t[Z*Z*N*M];
 	// n - номер приближения
 	for(int n=0; n<NumInit; n++)
 	{
@@ -241,7 +162,7 @@ void HMM::findModelParameters()
 	delete SIGw;
 }
 
-void HMM::classifyObservations(cl_float * p)
+void HMM::classifyObservations(real_t * p)
 {
 	using namespace std;
 	// внутренние вычисления
@@ -256,11 +177,11 @@ void HMM::classifyObservations(cl_float * p)
 	}
 }
 
-cl_float HMM::g(int t,int k,int i,int m,int n)
+real_t HMM::g(int t,int k,int i,int m,int n)
 {
 	//работаем с диагональными ковариационными матрицами
-	cl_float det=1.,res=0.;
-	cl_float tmp1,tmp2;
+	real_t det=1.,res=0.;
+	real_t tmp1,tmp2;
 	if (n==-1) //работа с уже полученными параметрами модели 
 	{
 		for (int z=0;z<Z;z++)
@@ -282,7 +203,7 @@ cl_float HMM::g(int t,int k,int i,int m,int n)
 		}
 	}
 	res*=-0.5;
-	res= (cl_float) exp(res)/sqrt((cl_float)pow(2.*pi,Z)*det);
+	res= (real_t) exp(res)/sqrt((real_t)pow(2.*pi,Z)*det);
 	if(!_finite(res))
 	{
 		res=0;
@@ -291,15 +212,15 @@ cl_float HMM::g(int t,int k,int i,int m,int n)
 
 }
 
-cl_float HMM::calcBaumWelсh(int n)
+real_t HMM::calcBaumWelсh(int n)
 {
 	std::fstream f; // debug
 	int T1=T-1;
 
-	cl_float * gam_sum = new cl_float[N];
-	cl_float * gamd_sum = new cl_float[N*M];
-	cl_float * tmp3 = new cl_float[Z];
-	cl_float tmp2;
+	real_t * gam_sum = new real_t[N];
+	real_t * gamd_sum = new real_t[N*M];
+	real_t * tmp3 = new real_t[Z];
+	real_t tmp2;
 	bool F=true;
 	//vector<double> tmp3(Z);
 
@@ -317,7 +238,7 @@ cl_float HMM::calcBaumWelсh(int n)
 		}
 		
 		// кернел 3.2
-		cl_float ttt=0.;
+		real_t ttt=0.;
 		for(int t=0; t<T1 && F; t++)
 		{
 			for(int k=0; k<K && F; k++)
@@ -502,7 +423,7 @@ cl_float HMM::calcBaumWelсh(int n)
 void HMM::internal_calculations(int n)
 {
 	int T1=T-1;
-	cl_float * TAU_used, * A_used, * PI_used ,*SIG_used, *MU_used;
+	real_t * TAU_used, * A_used, * PI_used ,*SIG_used, *MU_used;
 	if (n==-1){
 		TAU_used = TAU;
 		A_used = A;
@@ -548,7 +469,7 @@ void HMM::internal_calculations(int n)
 	// DEBUG
 
 	// кернел 2.1 (set_var)
-	cl_float atsum=0.,P=0.;
+	real_t atsum=0.,P=0.;
 	for(int k=0;k<K;k++)
 	{
 		for(int t=0;t<T;t++)
@@ -607,11 +528,11 @@ void HMM::internal_calculations(int n)
 	// DEBUG - satisfying
 	/*std::fstream f;
 	f.open("debugging_alf.txt",std::fstream::out);
-	for (cl_int i=0; i<N*T*K; i++)
+	for (int i=0; i<N*T*K; i++)
 		f << alf[i] << std::endl;
 	f.close();
 	f.open("debugging_alf_t.txt",std::fstream::out);
-	for (cl_int i=0; i<N*T*K; i++)
+	for (int i=0; i<N*T*K; i++)
 		f << alf_t[i] << std::endl;
 	f.close();*/
 	// DEBUG
@@ -667,7 +588,7 @@ void HMM::internal_calculations(int n)
 	// DEBUG c - satisfying
 	/*std::fstream f;
 	f.open("debugging_c.txt",std::fstream::out);
-	for (cl_int i=0; i<T*K; i++)
+	for (int i=0; i<T*K; i++)
 	f << c[i] << std::endl;
 	f.close();*/
 	// DEBUG
@@ -704,11 +625,11 @@ void HMM::internal_calculations(int n)
 		// DEBUG bet, bet_t - satisfying
 		/*std::fstream f;
 		f.open("debugging_bet.txt", std::fstream::out);
-		for (cl_int i = 0; i<N*T*K; i++)
+		for (int i = 0; i<N*T*K; i++)
 		f << bet[i] << std::endl;
 		f.close();
 		f.open("debugging_bet_t.txt", std::fstream::out);
-		for (cl_int i = 0; i<N*T*K; i++)
+		for (int i = 0; i<N*T*K; i++)
 		f << bet_t[i] << std::endl;
 		f.close();*/
 		// DEBUG
@@ -754,11 +675,11 @@ void HMM::internal_calculations(int n)
 		// DEBUG gam, gamd - satisfying
 		/*std::fstream f;
 		f.open("debugging_gam.txt", std::fstream::out);
-		for (cl_int i = 0; i<N*T*K; i++)
+		for (int i = 0; i<N*T*K; i++)
 		f << gam[i] << std::endl;
 		f.close();
 		f.open("debugging_gamd.txt", std::fstream::out);
-		for (cl_int i = 0; i<N*M*T*K; i++)
+		for (int i = 0; i<N*M*T*K; i++)
 		f << gamd[i] << std::endl;
 		f.close();*/
 		// DEBUG
@@ -791,7 +712,7 @@ void HMM::internal_calculations(int n)
 		// DEBUG ksi - satisfying
 		/*std::fstream f;
 		f.open("debugging_ksi.txt", std::fstream::out);
-		for (cl_int i = 0; i<N*N*T1*K; i++)
+		for (int i = 0; i<N*N*T1*K; i++)
 		f << ksi[i] << std::endl;
 		f.close();*/
 		// DEBUG
@@ -810,10 +731,10 @@ void HMM::internal_calculations(int n)
 	}
 }
 
-cl_float HMM::calcProbability()
+real_t HMM::calcProbability()
 {
 	// кернел4: без кернела =( или 2д редукция
-	cl_float res=0;
+	real_t res=0;
 	for(int k=0;k<K;k++)
 		for(int t=0;t<T;t++)
 			res -= log(c(t,k));

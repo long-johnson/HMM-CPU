@@ -1,17 +1,15 @@
 #include <utility>
-#define __NO_STD_VECTOR // Use cl::vector instead of STL version
-//#include <CL/opencl.h>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <iterator>
-#include "HMM.h"
 #include <windows.h>                // for Windows APIs
+#include "HMM.h"
 
 // подсчет процента верно распознанных последовательностей
-void classClassify(cl_float * p1, cl_float * p2, cl_float &percent1, cl_float &percent2, int K)
+void classClassify(real_t * p1, real_t * p2, real_t &percent1, real_t &percent2, int K)
 {
 	percent1=percent2=0;
 	for(int k=0;k<K;k++)
@@ -57,10 +55,10 @@ int main(void)
 	//
 	//  Ћј——»‘» ј÷»я
 	int K = M1.K;
-	cl_float * p1_1 = new cl_float[K]; for(int i=0; i<K; i++) p1_1[i]=0.;
-	cl_float * p1_2 = new cl_float[K]; for(int i=0; i<K; i++) p1_2[i]=0.;
-	cl_float * p2_1 = new cl_float[K]; for(int i=0; i<K; i++) p2_1[i]=0.;
-	cl_float * p2_2 = new cl_float[K]; for(int i=0; i<K; i++) p2_2[i]=0.;
+	real_t * p1_1 = new real_t[K]; for(int i=0; i<K; i++) p1_1[i]=0.;
+	real_t * p1_2 = new real_t[K]; for(int i=0; i<K; i++) p1_2[i]=0.;
+	real_t * p2_1 = new real_t[K]; for(int i=0; i<K; i++) p2_1[i]=0.;
+	real_t * p2_2 = new real_t[K]; for(int i=0; i<K; i++) p2_2[i]=0.;
 	M1.getTestObserv("model1\\Otest1.txt");		// считаем 1 тест в 1 модель
 	M2.getTestObserv("model1\\Otest1.txt");		// считаем 1 тест в 2 модель
 	QueryPerformanceCounter(&t1);				// start timer
@@ -88,7 +86,7 @@ int main(void)
 		cout << p2_1[i] << "\t" << p2_2[i] << endl;*/
 
 	/// подсчет процента верно распознанных и запись его в файл
-	cl_float succ1,fail1,succ2,fail2;
+	real_t succ1,fail1,succ2,fail2;
 	classClassify(p1_1,p1_2,succ1,fail1,K);
 	classClassify(p2_1,p2_2,fail2,succ2,K);
 	std::cout << (succ1 + succ2)*0.5;

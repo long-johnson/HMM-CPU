@@ -1,7 +1,5 @@
 #pragma once
 #include <utility>
-#define __NO_STD_VECTOR // Use cl::vector instead of STL version
-#include <CL/cl.hpp>
 #include <iostream>
 
 
@@ -29,42 +27,33 @@
 
 #define pi 3.1415926535897932384626433832795
 
+typedef float real_t;
+
 class HMM
 {
 public:
 	// параметры модели
-	cl_int N,M,K,T,NumInit;
-	cl_int Z;	// размерность наблюдений
-	cl_float *PI,*A,*TAU,*MU,*SIG,*MU1,*SIG1,*Otr,*A1,*PI1,*TAU1;
-	cl_float *alf,*bet,*c,*ksi,*gam,*gamd,*alf_t,*bet_t,*B;
-private: 
-	// переменные для контекста
-	cl::vector< cl::Platform > platformList;		// список платформ	
-	cl::Context * context;							// контекст
-	cl::vector<cl::Device> devices;					// устройства, доступные для данного контекста
-	cl::Kernel * kernel;							// кернел
-	cl::CommandQueue * queue;						// очередь
+	int N,M,K,T,NumInit;
+	int Z;	// размерность наблюдений
+	real_t *PI,*A,*TAU,*MU,*SIG,*MU1,*SIG1,*Otr,*A1,*PI1,*TAU1;
+	real_t *alf,*bet,*c,*ksi,*gam,*gamd,*alf_t,*bet_t,*B;
+
 public:
 	HMM(std::string filename);					// загрузка параметров модели из файла
 	~HMM(void);
-	void showInfo();							// получение информации об устройствах
 	void findModelParameters();					// нахождение параметров модели
 	void getTestObserv(std::string filename);	// считывание тестовых последовательностей для классификации
-	void classifyObservations(cl_float * p);	// классификация последовательностей наблюдений 
+	void classifyObservations(real_t * p);	// классификация последовательностей наблюдений 
 												// (p[k] - вероятностей того, что 
 												// данная модель породила последовательность под номером k)
 private:
 	// нахождение параметров алгоритомом Баума-Велша
-	cl_float calcBaumWelсh(int n);
+	real_t calcBaumWelсh(int n);
 	// вспомогательная функция, для расчетов в обучении и классификации
 	void internal_calculations(int n);
 	// вспомогательная функция для расчетов
-	cl_float g(int t,int k,int i,int m,int n);
+	real_t g(int t,int k,int i,int m,int n);
 	// нахождение вероятности генерации моделью наблюдений
-	cl_float calcProbability();
-	// инициализация контекста OpenCL
-	bool initializeOpenCL();
-	// проверка ошибок (вспом)
-	void checkErr(cl_int err, const char * name);
+	real_t calcProbability();
 };
 
