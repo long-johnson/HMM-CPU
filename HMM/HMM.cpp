@@ -221,10 +221,14 @@ real_t HMM::calcBaumWelсh(int n)
 	real_t * gamd_sum = new real_t[N*M];
 	real_t * tmp3 = new real_t[Z];
 	real_t tmp2;
+	real_t p_pred = 100;
+	real_t p = 10;
+
 	bool F=true;
 	//vector<double> tmp3(Z);
 
-	for(int iter=0;iter<5;iter++)
+	int iter;
+	for(iter = 0; iter < MAX_ITER && abs(p - p_pred) > EPS_BAUM; iter++)
 	{
 		// большой блок вспомогательных вычислений
 		internal_calculations(n);
@@ -411,12 +415,18 @@ real_t HMM::calcBaumWelсh(int n)
 			for(int m=0;m<M;m++)
 				for(int z1=0;z1<Z;z1++)
 					for(int z2=0;z2<Z;z2++)
-						SIG1(z1,z2,i,m,n)=SIG(z1,z2,i,m);				
+						SIG1(z1,z2,i,m,n)=SIG(z1,z2,i,m);		
+
+		p = calcProbability();		// посчитать новую вероятность
+		std::swap(p, p_pred);		// поменять новую и старую вероятности местами
+		std::cout << "diff =" << abs(p - p_pred) << std::endl;
 	}
 	
+	std::cout << "Baum Welsh: iters = " << iter << std::endl;
+
 	delete gamd_sum; delete gam_sum; delete tmp3;
 
-	return calcProbability();
+	return p_pred;					// вернем последнюю вероятность
 }
 
 
