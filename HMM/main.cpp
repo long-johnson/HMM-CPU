@@ -30,13 +30,6 @@ int main(void)
     QueryPerformanceFrequency(&frequency);  // get ticks per second
 	/// таймер
 
-	///
-	/// ИНИЦИАЛИЗАЦИЯ OpenCL
-
-	/// ИНИЦИАЛИЗАЦИЯ OpenCL
-	///
-
-
 	//
 	// ВЫЧИСЛЕНИЯ ПАРАМЕТРОВ МОДЕЛИ ТУТА
 	// считаем обучающие последовательности и начальные приближения для проведения Баума-Велша
@@ -47,7 +40,7 @@ int main(void)
 	M2.findModelParameters();
     QueryPerformanceCounter(&t2);	// stop timer
     elapsedTime = (1.0*t2.QuadPart - 1.0*t1.QuadPart) / (frequency.QuadPart*1.0);
-	printf("Suck sess\n"); printf("Elapsed time = %f s.\n",elapsedTime);
+	printf("Success\n"); printf("Elapsed time = %f s.\n",elapsedTime);
 	// ВЫЧИСЛЕНИЯ ПАРАМЕТРОВ МОДЕЛИ ТУТА
 	//
 	
@@ -59,41 +52,72 @@ int main(void)
 	real_t * p1_2 = new real_t[K]; for(int i=0; i<K; i++) p1_2[i]=0.;
 	real_t * p2_1 = new real_t[K]; for(int i=0; i<K; i++) p2_1[i]=0.;
 	real_t * p2_2 = new real_t[K]; for(int i=0; i<K; i++) p2_2[i]=0.;
-	M1.getTestObserv("model1\\Otest1.txt");		// считаем 1 тест в 1 модель
-	M2.getTestObserv("model1\\Otest1.txt");		// считаем 1 тест в 2 модель
+	M1.getObservations("model1\\Otest1.txt");		// считаем 1 тест в 1 модель
+	M2.getObservations("model1\\Otest1.txt");		// считаем 1 тест в 2 модель
 	QueryPerformanceCounter(&t1);				// start timer
-	M1.classifyObservations(p1_1);				// классификация последовательностей 1 типа 1 моделью
-	M2.classifyObservations(p1_2);				// классификация последовательностей 1 типа 2 моделью
+	M1.classifyWithLikelihood(p1_1);				// классификация последовательностей 1 типа 1 моделью
+	M2.classifyWithLikelihood(p1_2);				// классификация последовательностей 1 типа 2 моделью
     QueryPerformanceCounter(&t2);				// stop timer
     elapsedTime = (1.0*t2.QuadPart - 1.0*t1.QuadPart) / (frequency.QuadPart*1.0);
-	M1.getTestObserv("model1\\Otest2.txt");		// считаем 2 тест в 1 модель
-	M2.getTestObserv("model1\\Otest2.txt");		// считаем 2 тест в 2 модель
+	M1.getObservations("model1\\Otest2.txt");		// считаем 2 тест в 1 модель
+	M2.getObservations("model1\\Otest2.txt");		// считаем 2 тест в 2 модель
 	QueryPerformanceCounter(&t1);				// start timer
-	M1.classifyObservations(p2_1);				// классификация последовательностей 2 типа 1 моделью
-	M2.classifyObservations(p2_2);				// классификация последовательностей 2 типа 2 моделью
+	M1.classifyWithLikelihood(p2_1);				// классификация последовательностей 2 типа 1 моделью
+	M2.classifyWithLikelihood(p2_2);				// классификация последовательностей 2 типа 2 моделью
     QueryPerformanceCounter(&t2);				// stop timer
 	elapsedTime += (1.0*t2.QuadPart - 1.0*t1.QuadPart) / (frequency.QuadPart*1.0);
 	printf("Classification complete\nElapsed time = %f s.\n",elapsedTime);
 	// КЛАССИФИКАЦИЯ
 	//
 
-	/*using namespace std;
-	cout << "p1_1\tp1_2" << endl;
-	for(int i=0; i<K; i++)
-		cout << p1_1[i] << "\t" << p1_2[i] << endl;
-	cout << endl << "p2_1\tp2_2" << endl;
-	for(int i=0; i<K; i++)
-		cout << p2_1[i] << "\t" << p2_2[i] << endl;*/
-
 	/// подсчет процента верно распознанных и запись его в файл
 	real_t succ1,fail1,succ2,fail2;
 	classClassify(p1_1,p1_2,succ1,fail1,K);
 	classClassify(p2_1,p2_2,fail2,succ2,K);
-	std::cout << (succ1 + succ2)*0.5;
+	std::cout << (succ1 + succ2)/2 << std::endl;
 	std::fstream f;
-	f.open("ClassClassify.txt",std::fstream::out);
+	f.open("ClassificationResults.txt",std::fstream::out);
 	f<<(succ1+succ2)*0.5;
 	f.close();
+
+	///
+	/// Обучение с помощью производных
+	///
+
+	M1.getObservations("model1\\Ok.txt");	// read observations for model 1
+	M2.getObservations("model2\\Ok.txt");	// read observations for model 2
+	M1.learnWithDerivatives();				// train model 1 with derivatives
+	M2.learnWithDerivatives();				// train model 2 with derivatives
+
+	printf("Derivatives learning complete\n");
+
+	///
+	/// Классификация с помощью производных
+	///
+	// загрузим тестовые последовательности
+	real_t * Otest1 = new real_t[K * M1.T * M1.Z];
+	real_t * Otest2 = new real_t[K * M2.T * M2.Z];
+	M1.getObservations("model1\\Otest1.txt", Otest1);
+	M2.getObservations("model1\\Otest2.txt", Otest2);
+	// подготовим массив моделей
+	HMM * models[2] = {&M1, &M2};
+	// подготовим массив результатов
+	int * results1 = new int[K];
+	int * results2 = new int[K];
+	HMM::classifyWithDerivatives(Otest1, K, models, 2, results1);	// первая тестовая последовательность 
+	HMM::classifyWithDerivatives(Otest2, K, models, 2, results2);	// вторая тестовая последовательность
+
+	float percent = 0;
+	for (int k = 0; k < K; k++)
+	{
+		if (results1[k] == 0)
+			percent += 1;
+		if (results1[k] == 1)
+			percent += 1;
+	}
+	percent /= K*K;
+
+	printf("Derivatives classification complete\nPercent = %d", percent);
 
 	return EXIT_SUCCESS;
 }
