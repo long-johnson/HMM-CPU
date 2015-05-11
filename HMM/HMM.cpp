@@ -820,7 +820,8 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 		for (int j = 0; j<N; j++)
 			alf1_N[j] = (j == i) ? B(i, 0, k) : 0;	//ALF1_PI(j,i);
 		//a=0;b=0;		
-		d_PI[i] = calc_alpha_der(k, alf1_N, a_N, b_N);
+		real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+		d_PI[k*N+i] = isfinite(temp) ? temp : 0.0;
 	}
 
 	//производные по A
@@ -833,7 +834,8 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 				for (int j1 = 0; j1<N; j1++)
 					a_N[i1*N + j1] = (i1 == i && j1 == j) ? 1 : 0;
 			//b=0
-			d_A(k, i, j) = calc_alpha_der(k, alf1_N, a_N, b_N);
+			real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+			d_A(k, i, j) = isfinite(temp) ? temp : 0.0;
 		}
 
 	//производные по MU и SIG
@@ -862,7 +864,8 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 						b_N[i1*T + t] = (i1 == i) ? TAU(i, m)*g(t, k, i, m, -1) : 0;
 					alf1_N[i1] = PI[i] * b_N[i1*T + 0];
 				}
-				d_MU(k, z, i, m) = calc_alpha_der(k, alf1_N, a_N, b_N);
+				real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+				d_MU(k, z, i, m) = isfinite(temp) ? temp : 0.0;
 
 				for (int i1 = 0; i1<N; i1++)
 				{
@@ -870,8 +873,8 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 						b_N[i1*T + t] = (i1 == i) ? TAU(i, m)*g(t, k, i, m, -1)*0.5* (pow((Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m), 2.0) - 1. / dets[i*M + m]) : 0;
 					alf1_N[i1] = PI[i] * b_N[i1*T + 0];
 				}
-				d_SIG(k, z, z, i, m) = calc_alpha_der(k, alf1_N, a_N, b_N);
-
+				temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+				d_SIG(k, z, z, i, m) = isfinite(temp) ? temp : 0.0;
 			}
 
 	//производные по TAU		
@@ -882,7 +885,8 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 			{
 				alf1_N[i1] = PI[i1] * (i1 == i) ? g(0, k, i, m, -1) : 0;	//b[i1][0];
 			}
-			d_TAU(k, i, m) = calc_alpha_der(k, alf1_N, a_N, b_N);
+			real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+			d_TAU(k, i, m) = isfinite(temp) ? temp : 0.0;
 		}
 
 	
@@ -950,9 +954,106 @@ void HMM::classifyWithDerivatives(real_t * Ok, int K, HMM ** models, int numMode
 	// calc derivatives for 1st model
 	models[1]->calcDerivatives(Ok, K, d_PI_1, d_A_1, d_TAU_1, d_MU_1, d_SIG_1);
 
-	// Launch SVM here
+	// prepare SVM data
+	svm_problem prob;
+	svm_parameter param;
 
+	int derivativesVectorSize = N + N*N + N*M + Z*N*M + Z*Z*N*M;	// number of derivatives for each sequence
+	prob.l = 2 * K;					// number of derivative vectors (for both models)
+	prob.y = new double[2 * K];		// belonging of each derivative vector
+	for (int i = 0; i < K; i++)
+	{
+		prob.y[i] = -1;
+		prob.y[i + K] = 1;
+	}
+	prob.x = new svm_node* [2 * K];		// vectors of derivatives
+	// first model
+	for (int k = 0; k < K; k++)			// k - индекс последовательности наблюдений
+	{
+		prob.x[k] = new svm_node[derivativesVectorSize];	// allocate memeory for derivatives vector
+		int j = 0;		// указатель на положение в одном векторе производных
+		for (int i = 0; i < N; i++, j++)
+		{
+			prob.x[k][j].index =  j+1;
+			prob.x[k][j].value = models[0]->P_PI[k*N + i];
+		}
+		for (int i = 0; i < N*N; i++, j++)
+		{
+			prob.x[k][j].index = j+1;
+			prob.x[k][j].value = models[0]->P_A[k*N*N + i];
+		}
+		for (int i = 0; i < N*M; i++, j++)
+		{
+			prob.x[k][j].index = j+1;
+			prob.x[k][j].value = models[0]->P_TAU[k*N*M + i];
+		}
+		for (int i = 0; i < Z*N*M; i++, j++)
+		{
+			prob.x[k][j].index = j+1;
+			prob.x[k][j].value = models[0]->P_MU[k*Z*N*M + i];
+		}
+		for (int i = 0; i < Z*Z*N*M; i++, j++)
+		{
+			prob.x[k][j].index = j+1;
+			prob.x[k][j].value = models[0]->P_SIG[k*Z*Z*N*M + i];
+		}
+	}
+	// second model
+	for (int k = 0; k < K; k++)			// k - индекс последовательности наблюдений
+	{
+		prob.x[K+k] = new svm_node[derivativesVectorSize];	// allocate memory for derivatives vector
+		int j = 0;		// указатель на положение в одном векторе производных
+		for (int i = 0; i < N; i++, j++)
+		{
+			prob.x[K+k][j].index = j + 1;
+			prob.x[K+k][j].value = models[1]->P_PI[k*N + i];
+		}
+		for (int i = 0; i < N*N; i++, j++)
+		{
+			prob.x[K+k][j].index = j + 1;
+			prob.x[K+k][j].value = models[1]->P_A[k*N*N + i];
+		}
+		for (int i = 0; i < N*M; i++, j++)
+		{
+			prob.x[K+k][j].index = j + 1;
+			prob.x[K+k][j].value = models[1]->P_TAU[k*N*M + i];
+		}
+		for (int i = 0; i < Z*N*M; i++, j++)
+		{
+			prob.x[K+k][j].index = j + 1;
+			prob.x[K+k][j].value = models[1]->P_MU[k*Z*N*M + i];
+		}
+		for (int i = 0; i < Z*Z*N*M; i++, j++)
+		{
+			prob.x[K+k][j].index = j + 1;
+			prob.x[K+k][j].value = models[1]->P_SIG[k*Z*Z*N*M + i];
+		}
+	}
+
+	// set parameters
+	param.svm_type = C_SVC;
+	param.kernel_type = RBF;
+	param.degree = 3;
+	param.gamma = 0;	// 1/num_features
+	param.coef0 = 0;
+	param.nu = 0.5;
+	param.cache_size = 500;
+	param.C = 1;
+	param.eps = 1e-3;
+	param.p = 0.1;
+	param.shrinking = 1;
+	param.probability = 0;
+	param.nr_weight = 0;
+	param.weight_label = NULL;
+	param.weight = NULL;
+
+	// Launch SVM here
+	std::cout << "Before train" << std::endl;
+	svm_model * model = svm_train(&prob, &param);
+	std::cout << "After train" << std::endl;
 	// End SVM here
+	
+	// after train
 
 	// fill results
 
