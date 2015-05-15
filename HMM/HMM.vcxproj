@@ -163,9 +163,11 @@
   <ItemGroup>
     <ClCompile Include="HMM.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="svm.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="HMM.h" />
+    <ClInclude Include="svm.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

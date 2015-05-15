@@ -94,7 +94,7 @@ int main(void)
 	///
 	/// Классификация с помощью производных
 	///
-	// загрузим тестовые последовательности
+	// загрузим тестовые последовательности в массивы Otest
 	real_t * Otest1 = new real_t[K * M1.T * M1.Z];
 	real_t * Otest2 = new real_t[K * M2.T * M2.Z];
 	M1.getObservations("model1\\Otest1.txt", Otest1);
@@ -115,7 +115,7 @@ int main(void)
 		if (results1[k] == 1)
 			percent += 1;
 	}
-	percent /= K*K;
+	percent /= K*2.0;
 
 	printf("Derivatives classification complete\nPercent = %d", percent);
 

@@ -1,6 +1,7 @@
 #pragma once
 #include "HMM.h"
 #include "fstream"
+#include "svm.h"
 
 HMM::HMM(std::string filename)
 {
@@ -951,7 +952,10 @@ void HMM::classifyWithDerivatives(real_t * Ok, int K, HMM ** models, int numMode
 	models[1]->calcDerivatives(Ok, K, d_PI_1, d_A_1, d_TAU_1, d_MU_1, d_SIG_1);
 
 	// Launch SVM here
-
+	svm_problem prob;
+	svm_parameter param;
+	prob.
+	svm_model * svm1 = svm_train(&prob, &param);
 	// End SVM here
 
 	// fill results
