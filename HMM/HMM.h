@@ -1,6 +1,7 @@
 #pragma once
 #include <utility>
 #include <iostream>
+#include "svm.h"
 
 #define A(i,j) A[i*N+j]
 #define A1(i,j) A1[i*N+j]
@@ -29,7 +30,7 @@
 #define pi 3.1415926535897932384626433832795
 
 // максимум итераций в алгоритме Баума-Велша
-#define MAX_ITER 10
+#define MAX_ITER 5
 
 // требуемая точность в алгоритме Баума-Велша
 #define EPS_BAUM 0.01
