@@ -793,12 +793,12 @@ void HMM::learnWithDerivatives()
 	this->dets = new real_t[N*M];
 
 	//clear allocated memory
-	for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	/*for (int i = 0; i < N; i++) alf1_N[i] = 0;
 	for (int i = 0; i < N*N; i++) a_N[i] = 0;
 	for (int i = 0; i < N*T; i++) b_N[i] = 0;
 	for (int i = 0; i < T; i++) cd[i] = 0;
 	for (int i = 0; i < T*N; i++) alf_t_d[i] = 0;
-	for (int i = 0; i < T*N; i++) alf_s_d[i] = 0;
+	for (int i = 0; i < T*N; i++) alf_s_d[i] = 0;*/
 	
 	// carry out some internal calculations 
 	internal_calculations(-1);
@@ -825,7 +825,7 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 #define d_SIG(k,z,i,m) d_SIG[(((k)*N+i)*M+m)*Z+z]
 
 	//clear allocated memory
-	for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	//for (int i = 0; i < N; i++) alf1_N[i] = 0;
 	for (int i = 0; i < N*N; i++) a_N[i] = 0;
 	for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
@@ -841,7 +841,7 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 
 	//clear allocated memory
 	for (int i = 0; i < N; i++) alf1_N[i] = 0;
-	for (int i = 0; i < N*N; i++) a_N[i] = 0;
+	//for (int i = 0; i < N*N; i++) a_N[i] = 0;
 	for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
 	//производные по A
@@ -857,9 +857,9 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 
 
 	//clear allocated memory
-	for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	//for (int i = 0; i < N; i++) alf1_N[i] = 0;
 	for (int i = 0; i < N*N; i++) a_N[i] = 0;
-	for (int i = 0; i < N*T; i++) b_N[i] = 0;
+	//for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
 	//производные по MU и SIG
 	for (int i = 0; i<N; i++)
@@ -877,7 +877,7 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 				for (int i1 = 0; i1<N; i1++)
 				{
 					for (int t = 0; t<T; t++)
-						b_N[i1*T + t] = (i1 == i) ? TAU(i, m)*g(t, k, i, m, -1) : 0;
+						b_N[i1*T + t] = (i1 == i) ? 0.5 * TAU(i, m) * g(t, k, i, m, -1) * (Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m) : 0;
 					alf1_N[i1] = PI[i] * b_N[i1*T + 0];
 				}
 				real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
