@@ -21,6 +21,41 @@ void classClassify(real_t * p1, real_t * p2, real_t &percent1, real_t &percent2,
 	percent2/=K;
 }
 
+void saveDerivativesToFile(HMM &model, std::string fileName)
+{
+	std::ofstream f;
+	int N = model.N, M = model.M, Z = model.Z, K = model.K;
+	f.open(fileName, std::fstream::out);
+	f << "Model" << std::endl;
+	for (int k = 0; k < K; k++)
+	{
+
+		f << "k = " << k << std::endl;
+		f << "PI " << std::endl;
+		for (int i = 0, size = N; i < size; i++)
+			f << model.P_PI[k*size + i] << " ";
+		f << std::endl;
+		f << "A " << std::endl;
+		for (int i = 0, size = N*N; i < size; i++)
+			f << model.P_A[k*size + i] << " ";
+		f << std::endl;
+		f << "TAU " << std::endl;
+		for (int i = 0, size = N*M; i < size; i++)
+			f << model.P_TAU[k*size + i] << " ";
+		f << std::endl;
+		f << "MU " << std::endl;
+		for (int i = 0, size = Z*N*M; i < size; i++)
+			f << model.P_MU[k*size + i] << " ";
+		f << std::endl;
+		f << "SIG " << std::endl;
+		for (int i = 0, size = Z*N*M; i < size; i++){
+			f << model.P_SIG[k*size + i] << " ";
+		}
+		f << std::endl;
+	}
+	f.close();
+}
+
 int main(void)
 {
 	/// таймер
@@ -80,6 +115,9 @@ int main(void)
 	f<<(succ1+succ2)*0.5;
 	f.close();
 
+
+
+
 	///
 	/// Обучение с помощью производных
 	///
@@ -90,6 +128,11 @@ int main(void)
 	M2.learnWithDerivatives();				// train model 2 with derivatives
 
 	printf("Derivatives learning complete\n");
+
+	// DEBUG - lerning derivatives output for debugging means
+	saveDerivativesToFile(M1, "M1_learn_derivs.txt");
+	saveDerivativesToFile(M2, "M2_learn_derivs.txt");
+
 
 	///
 	/// Классификация с помощью производных

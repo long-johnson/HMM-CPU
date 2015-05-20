@@ -756,9 +756,9 @@ void HMM::getObservations(std::string fname)
 {
 	std::fstream f;
 	f.open(fname,std::fstream::in);
-	for(int k=0;k<K;++k)
-		for(int t=0;t<T;t++)
-			for (int z=0;z<Z;z++)
+	for(int k=0; k<K; k++)
+		for(int t=0; t<T; t++)
+			for (int z=0; z<Z; z++)
 				f>>Otr(k,t,z);
 	f.close();
 }
@@ -778,17 +778,27 @@ void HMM::getObservations(std::string fname, real_t * Otr)
 void HMM::learnWithDerivatives()
 {
 	// allocate memory for derivatives
-	P_PI = new real_t[K*N];
-	P_A = new real_t[K*N*N];
-	P_TAU = new real_t[K*N*M];
-	P_MU = new real_t[K*Z*N*M];
-	P_SIG = new real_t[K*Z*Z*N*M];
+	this->P_PI = new real_t[K*N];
+	this->P_A = new real_t[K*N*N];
+	this->P_TAU = new real_t[K*N*M];
+	this->P_MU = new real_t[K*Z*N*M];
+	this->P_SIG = new real_t[K*Z*N*M];
 	// allocate memory for auxilary variables
 	this->alf1_N = new real_t[N];
 	this->a_N = new real_t[N*N];
 	this->b_N = new real_t[N*T];
 	this->cd = new real_t[T];
-	this->alf_t_d = new real_t[T*N], this->alf_s_d = new real_t[T*N];
+	this->alf_t_d = new real_t[T*N];
+	this->alf_s_d = new real_t[T*N];
+	this->dets = new real_t[N*M];
+
+	//clear allocated memory
+	for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	for (int i = 0; i < N*N; i++) a_N[i] = 0;
+	for (int i = 0; i < N*T; i++) b_N[i] = 0;
+	for (int i = 0; i < T; i++) cd[i] = 0;
+	for (int i = 0; i < T*N; i++) alf_t_d[i] = 0;
+	for (int i = 0; i < T*N; i++) alf_s_d[i] = 0;
 	
 	// carry out some internal calculations 
 	internal_calculations(-1);
@@ -803,6 +813,7 @@ void HMM::learnWithDerivatives()
 	delete cd;
 	delete alf_t_d;
 	delete alf_s_d;
+	delete dets;
 }
 
 void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG)
@@ -811,12 +822,16 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 #define d_A(k,i,j) d_A[((k)*N+i)*N+j]
 #define d_TAU(k,i,m) d_TAU[((k)*N+i)*M+m]
 #define d_MU(k,z,i,m) d_MU[(((k)*N+i)*M+m)*Z+z]
-#define d_SIG(k,z1,z2,i,m) d_SIG[((((k)*N+i)*M+m)*Z+z1)*Z+ z2]
+#define d_SIG(k,z,i,m) d_SIG[(((k)*N+i)*M+m)*Z+z]
+
+	//clear allocated memory
+	for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	for (int i = 0; i < N*N; i++) a_N[i] = 0;
+	for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
 	//производные по PI
 	for (int i = 0; i<N; i++)
 	{
-
 		for (int j = 0; j<N; j++)
 			alf1_N[j] = (j == i) ? B(i, 0, k) : 0;	//ALF1_PI(j,i);
 		//a=0;b=0;		
@@ -824,28 +839,29 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 		d_PI[k*N+i] = isfinite(temp) ? temp : 0.0;
 	}
 
+	//clear allocated memory
+	for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	for (int i = 0; i < N*N; i++) a_N[i] = 0;
+	for (int i = 0; i < N*T; i++) b_N[i] = 0;
+
 	//производные по A
-	for (int i = 0; i<N; i++)
-		alf1_N[i] = 0;
 	for (int i = 0; i<N; i++)
 		for (int j = 0; j<N; j++)
 		{
 			for (int i1 = 0; i1<N; i1++)
 				for (int j1 = 0; j1<N; j1++)
 					a_N[i1*N + j1] = (i1 == i && j1 == j) ? 1 : 0;
-			//b=0
 			real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
 			d_A(k, i, j) = isfinite(temp) ? temp : 0.0;
 		}
 
-	//производные по MU и SIG
-	for (int i = 0; i<N; i++)
-		alf1_N[i] = 0.;
-	for (int i1 = 0; i1<N; i1++)
-		for (int j1 = 0; j1<N; j1++)
-			a_N[i1*N + j1] = 0;
 
-	real_t * dets = new real_t[N*M];
+	//clear allocated memory
+	for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	for (int i = 0; i < N*N; i++) a_N[i] = 0;
+	for (int i = 0; i < N*T; i++) b_N[i] = 0;
+
+	//производные по MU и SIG
 	for (int i = 0; i<N; i++)
 		for (int m = 0; m<M; m++)
 		{
@@ -874,8 +890,13 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 					alf1_N[i1] = PI[i] * b_N[i1*T + 0];
 				}
 				temp = calc_alpha_der(k, alf1_N, a_N, b_N);
-				d_SIG(k, z, z, i, m) = isfinite(temp) ? temp : 0.0;
+				d_SIG(k, z, i, m) = isfinite(temp) ? temp : 0.0;
 			}
+
+	//clear allocated memory
+	//for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	//for (int i = 0; i < N*N; i++) a_N[i] = 0;
+	//for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
 	//производные по TAU		
 	for (int i = 0; i<N; i++)
@@ -883,7 +904,9 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 		{
 			for (int i1 = 0; i1<N; i1++)
 			{
-				alf1_N[i1] = PI[i1] * (i1 == i) ? g(0, k, i, m, -1) : 0;	//b[i1][0];
+				for (int t = 0; t<T; t++)									// fixed!
+					b_N[i1*T + t] = (i1 == i) ? g(t, k, i, m, -1) : 0;		// fixed!
+				alf1_N[i1] = PI[i1] * ((i1 == i) ? g(0, k, i, m, -1) : 0);	//b[i1][0];
 			}
 			real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
 			d_TAU(k, i, m) = isfinite(temp) ? temp : 0.0;
@@ -892,11 +915,16 @@ void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, re
 	
 }
 
-real_t HMM::calc_alpha_der(int k, real_t * alf1, real_t * a, real_t * b)
+real_t HMM::calc_alpha_der(int k, real_t * alf1_N, real_t * a_N, real_t * b_N)
 {
+	for (int i = 0; i < T; i++) cd[i] = 0;
+	for (int i = 0; i < T*N; i++) alf_t_d[i] = 0;
+	for (int i = 0; i < T*N; i++) alf_s_d[i] = 0;
+
+
 	for (int i = 0; i<N; i++)
 	{
-		alf_t_d[0*N+i] = alf1[i];
+		alf_t_d[0*N+i] = alf1_N[i];
 		cd[0] += alf_t_d[0*N+i];
 	}
 	cd[0] = -c(0, k)*c(0, k)*cd[0];
@@ -910,10 +938,10 @@ real_t HMM::calc_alpha_der(int k, real_t * alf1, real_t * a, real_t * b)
 			sum1 = sum2 = 0;
 			for (int j = 0; j<N; j++)
 			{
-				sum1 += alf_s_d[(t - 1)*N+i] * A(j, i) + alf(t - 1, j, k)*a[j*N+i];
+				sum1 += alf_s_d[(t - 1)*N+i] * A(j, i) + alf(t - 1, j, k)*a_N[j*N+i];
 				sum2 += alf(t - 1, j, k)*A(j, i);
 			}
-			alf_t_d[t*N+i] = sum1*B(i, t, k) + sum2*b[i*T+t];
+			alf_t_d[t*N+i] = sum1*B(i, t, k) + sum2*b_N[i*T+t];
 			cd[t] += alf_t_d[t*N+i];
 		}
 		cd[t] = -c(t, k)*c(t, k)*cd[t];
