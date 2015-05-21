@@ -35,6 +35,15 @@ HMM::HMM(std::string filename)
 	SIG1 = new real_t[N*M*Z*Z*NumInit];
 	Otr = new real_t[T*Z*K];
 
+	// вспомогательные переменные
+	this->alf1_N = new real_t[N];
+	this->a_N = new real_t[N*N];
+	this->b_N = new real_t[N*T];
+	this->cd = new real_t[T];
+	this->alf_t_d = new real_t[T*N];
+	this->alf_s_d = new real_t[T*N];
+	this->dets = new real_t[N*M];
+
 
 	f.open(filename+"PI1.txt",std::fstream::in);
 	for(int i=0;i<N;i++)
@@ -774,46 +783,77 @@ void HMM::getObservations(std::string fname, real_t * Otr)
 	f.close();
 }
 
-
-void HMM::learnWithDerivatives()
+// for debug means
+void saveDerivativesToFile(std::string fileName, int N, int M, int Z, int K, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG)
 {
-	// allocate memory for derivatives
-	this->P_PI = new real_t[K*N];
-	this->P_A = new real_t[K*N*N];
-	this->P_TAU = new real_t[K*N*M];
-	this->P_MU = new real_t[K*Z*N*M];
-	this->P_SIG = new real_t[K*Z*N*M];
-	// allocate memory for auxilary variables
-	this->alf1_N = new real_t[N];
-	this->a_N = new real_t[N*N];
-	this->b_N = new real_t[N*T];
-	this->cd = new real_t[T];
-	this->alf_t_d = new real_t[T*N];
-	this->alf_s_d = new real_t[T*N];
-	this->dets = new real_t[N*M];
+	std::ofstream f;
+	f.open(fileName, std::fstream::out);
+	f << "Model" << std::endl;
+	for (int k = 0; k < K; k++)
+	{
+		f << "k = " << k << std::endl;
+		f << "PI " << std::endl;
+		for (int i = 0, size = 2*N; i < size; i++)
+			f << d_PI[k*size + i] << " ";
+		f << std::endl;
+		f << "A " << std::endl;
+		for (int i = 0, size = 2*N*N; i < size; i++)
+			f << d_A[k*size + i] << " ";
+		f << std::endl;
+		f << "TAU " << std::endl;
+		for (int i = 0, size = 2*N*M; i < size; i++)
+			f << d_TAU[k*size + i] << " ";
+		f << std::endl;
+		f << "MU " << std::endl;
+		for (int i = 0, size = 2*Z*N*M; i < size; i++)
+			f << d_MU[k*size + i] << " ";
+		f << std::endl;
+		f << "SIG " << std::endl;
+		for (int i = 0, size = 2*Z*N*M; i < size; i++){
+			f << d_SIG[k*size + i] << " ";
+		}
+		f << std::endl;
+	}
+	f.close();
+}
 
-	//clear allocated memory
-	/*for (int i = 0; i < N; i++) alf1_N[i] = 0;
-	for (int i = 0; i < N*N; i++) a_N[i] = 0;
-	for (int i = 0; i < N*T; i++) b_N[i] = 0;
-	for (int i = 0; i < T; i++) cd[i] = 0;
-	for (int i = 0; i < T*N; i++) alf_t_d[i] = 0;
-	for (int i = 0; i < T*N; i++) alf_s_d[i] = 0;*/
-	
-	// carry out some internal calculations 
-	internal_calculations(-1);
-	
-	// calc derivative for each parameter and each sequence
-	for (int k = 0; k<K; k++)
-		calc_derivative(k, P_PI, P_A, P_TAU, P_MU, P_SIG);
+svm_model * HMM::trainWithDerivatives(real_t ** observations, int K, HMM ** models, int numModels, svm_scaling_parameters & scalingParams)
+{
+	int N = models[0]->N, M = models[0]->M, Z = models[0]->Z;	// all the same
+	// allocate memory for training derivatives for model 1 and 2
+	real_t ** d_PI = new real_t *[numModels];
+	real_t ** d_A = new real_t *[numModels];
+	real_t ** d_TAU = new real_t *[numModels];
+	real_t ** d_MU = new real_t *[numModels];
+	real_t ** d_SIG = new real_t *[numModels];
+	d_PI[0] = new real_t[2*K*N];
+	d_A[0] = new real_t[2*K*N*N];
+	d_TAU[0] = new real_t[2*K*N*M];
+	d_MU[0] = new real_t[2*K*Z*N*M];
+	d_SIG[0] = new real_t[2*K*Z*N*M];
+	d_PI[1] = new real_t[2*K*N];
+	d_A[1] = new real_t[2*K*N*N];
+	d_TAU[1] = new real_t[2*K*N*M];
+	d_MU[1] = new real_t[2*K*Z*N*M];
+	d_SIG[1] = new real_t[2*K*Z*N*M];
 
-	delete alf1_N;
-	delete a_N;
-	delete b_N;
-	delete cd;
-	delete alf_t_d;
-	delete alf_s_d;
-	delete dets;
+	// calculate derivatives for 1st model and 1st training observations
+	models[0]->calcDerivatives(observations[0], K, &d_PI[0][0], &d_A[0][0], &d_TAU[0][0], &d_MU[0][0], &d_SIG[0][0]);
+	// calculate derivatives for 1st model and 2nd training observations
+	models[0]->calcDerivatives(observations[1], K, &d_PI[0][K*N], &d_A[0][K*N*N], &d_TAU[0][K*N*M], &d_MU[0][K*Z*N*M], &d_SIG[0][K*Z*N*M]);
+	// calculate derivatives for 2nd model and 1st training observations
+	models[1]->calcDerivatives(observations[0], K, &d_PI[1][0], &d_A[1][0], &d_TAU[1][0], &d_MU[1][0], &d_SIG[1][0]);
+	// calculate derivatives for 2st model and 2nd training observations
+	models[1]->calcDerivatives(observations[1], K, &d_PI[1][K*N], &d_A[1][K*N*N], &d_TAU[1][K*N*M], &d_MU[1][K*Z*N*M], &d_SIG[1][K*Z*N*M]);
+
+	// debug
+	//saveDerivativesToFile("M1_train_derivs.txt", N, M, Z, K, d_PI[0], d_A[0], d_TAU[0], d_MU[0], d_SIG[0]);
+	//saveDerivativesToFile("M2_train_derivs.txt", N, M, Z, K, d_PI[1], d_A[1], d_TAU[1], d_MU[1], d_SIG[1]);
+	// debug
+
+	// SVM training
+	svm_model model;
+	return &model;
 }
 
 void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG)
@@ -953,149 +993,149 @@ real_t HMM::calc_alpha_der(int k, real_t * alf1_N, real_t * a_N, real_t * b_N)
 
 }
 
-void HMM::classifyWithDerivatives(real_t * Ok, int K, HMM ** models, int numModels, int * results)
+void HMM::classifyWithDerivatives(real_t * observations, int K, svm_model & svm_trained_model, svm_scaling_parameters & scalingParams, int * results)
 {
-	// by this moment we shall compare only two models
-	numModels = 2;
+	//// by this moment we shall compare only two models
+	//numModels = 2;
 
-	int N = models[0]->N;
-	int M = models[0]->M;
-	int Z = models[0]->Z;
+	//int N = models[0]->N;
+	//int M = models[0]->M;
+	//int Z = models[0]->Z;
 
-	// allocate memory for derivatives for 1st model
-	real_t * d_PI_0 = new real_t[K*N];
-	real_t * d_A_0 = new real_t[K*N*N];
-	real_t * d_TAU_0 = new real_t[K*N*M];
-	real_t * d_MU_0 = new real_t[K*Z*N*M];
-	real_t * d_SIG_0 = new real_t[K*Z*Z*N*M];
+	//// allocate memory for derivatives for 1st model
+	//real_t * d_PI_0 = new real_t[K*N];
+	//real_t * d_A_0 = new real_t[K*N*N];
+	//real_t * d_TAU_0 = new real_t[K*N*M];
+	//real_t * d_MU_0 = new real_t[K*Z*N*M];
+	//real_t * d_SIG_0 = new real_t[K*Z*Z*N*M];
 
-	// calc derivatives for 1st model
-	models[0]->calcDerivatives(Ok, K, d_PI_0, d_A_0, d_TAU_0, d_MU_0, d_SIG_0);
+	//// calc derivatives for 1st model
+	//models[0]->calcDerivatives(Ok, K, d_PI_0, d_A_0, d_TAU_0, d_MU_0, d_SIG_0);
 
-	// allocate memory for derivatives for 2nd model
-	real_t * d_PI_1 = new real_t[K*N];
-	real_t * d_A_1 = new real_t[K*N*N];
-	real_t * d_TAU_1 = new real_t[K*N*M];
-	real_t * d_MU_1 = new real_t[K*Z*N*M];
-	real_t * d_SIG_1 = new real_t[K*Z*Z*N*M];
+	//// allocate memory for derivatives for 2nd model
+	//real_t * d_PI_1 = new real_t[K*N];
+	//real_t * d_A_1 = new real_t[K*N*N];
+	//real_t * d_TAU_1 = new real_t[K*N*M];
+	//real_t * d_MU_1 = new real_t[K*Z*N*M];
+	//real_t * d_SIG_1 = new real_t[K*Z*Z*N*M];
 
-	// calc derivatives for 1st model
-	models[1]->calcDerivatives(Ok, K, d_PI_1, d_A_1, d_TAU_1, d_MU_1, d_SIG_1);
+	//// calc derivatives for 1st model
+	//models[1]->calcDerivatives(Ok, K, d_PI_1, d_A_1, d_TAU_1, d_MU_1, d_SIG_1);
 
-	// prepare SVM data
-	svm_problem prob;
-	svm_parameter param;
+	//// prepare SVM data
+	//svm_problem prob;
+	//svm_parameter param;
 
-	int derivativesVectorSize = N + N*N + N*M + Z*N*M + Z*Z*N*M;	// number of derivatives for each sequence
-	prob.l = 2 * K;					// number of derivative vectors (for both models)
-	prob.y = new double[2 * K];		// belonging of each derivative vector
-	for (int i = 0; i < K; i++)
-	{
-		prob.y[i] = -1;
-		prob.y[i + K] = 1;
-	}
-	prob.x = new svm_node* [2 * K];		// vectors of derivatives
-	// first model
-	for (int k = 0; k < K; k++)			// k - индекс последовательности наблюдений
-	{
-		prob.x[k] = new svm_node[derivativesVectorSize];	// allocate memeory for derivatives vector
-		int j = 0;		// указатель на положение в одном векторе производных
-		for (int i = 0; i < N; i++, j++)
-		{
-			prob.x[k][j].index =  j+1;
-			prob.x[k][j].value = models[0]->P_PI[k*N + i];
-		}
-		for (int i = 0; i < N*N; i++, j++)
-		{
-			prob.x[k][j].index = j+1;
-			prob.x[k][j].value = models[0]->P_A[k*N*N + i];
-		}
-		for (int i = 0; i < N*M; i++, j++)
-		{
-			prob.x[k][j].index = j+1;
-			prob.x[k][j].value = models[0]->P_TAU[k*N*M + i];
-		}
-		for (int i = 0; i < Z*N*M; i++, j++)
-		{
-			prob.x[k][j].index = j+1;
-			prob.x[k][j].value = models[0]->P_MU[k*Z*N*M + i];
-		}
-		for (int i = 0; i < Z*Z*N*M; i++, j++)
-		{
-			prob.x[k][j].index = j+1;
-			prob.x[k][j].value = models[0]->P_SIG[k*Z*Z*N*M + i];
-		}
-	}
-	// second model
-	for (int k = 0; k < K; k++)			// k - индекс последовательности наблюдений
-	{
-		prob.x[K+k] = new svm_node[derivativesVectorSize];	// allocate memory for derivatives vector
-		int j = 0;		// указатель на положение в одном векторе производных
-		for (int i = 0; i < N; i++, j++)
-		{
-			prob.x[K+k][j].index = j + 1;
-			prob.x[K+k][j].value = models[1]->P_PI[k*N + i];
-		}
-		for (int i = 0; i < N*N; i++, j++)
-		{
-			prob.x[K+k][j].index = j + 1;
-			prob.x[K+k][j].value = models[1]->P_A[k*N*N + i];
-		}
-		for (int i = 0; i < N*M; i++, j++)
-		{
-			prob.x[K+k][j].index = j + 1;
-			prob.x[K+k][j].value = models[1]->P_TAU[k*N*M + i];
-		}
-		for (int i = 0; i < Z*N*M; i++, j++)
-		{
-			prob.x[K+k][j].index = j + 1;
-			prob.x[K+k][j].value = models[1]->P_MU[k*Z*N*M + i];
-		}
-		for (int i = 0; i < Z*Z*N*M; i++, j++)
-		{
-			prob.x[K+k][j].index = j + 1;
-			prob.x[K+k][j].value = models[1]->P_SIG[k*Z*Z*N*M + i];
-		}
-	}
+	//int derivativesVectorSize = N + N*N + N*M + Z*N*M + Z*Z*N*M;	// number of derivatives for each sequence
+	//prob.l = 2 * K;					// number of derivative vectors (for both models)
+	//prob.y = new double[2 * K];		// belonging of each derivative vector
+	//for (int i = 0; i < K; i++)
+	//{
+	//	prob.y[i] = -1;
+	//	prob.y[i + K] = 1;
+	//}
+	//prob.x = new svm_node* [2 * K];		// vectors of derivatives
+	//// first model
+	//for (int k = 0; k < K; k++)			// k - индекс последовательности наблюдений
+	//{
+	//	prob.x[k] = new svm_node[derivativesVectorSize];	// allocate memeory for derivatives vector
+	//	int j = 0;		// указатель на положение в одном векторе производных
+	//	for (int i = 0; i < N; i++, j++)
+	//	{
+	//		prob.x[k][j].index =  j+1;
+	//		prob.x[k][j].value = models[0]->P_PI[k*N + i];
+	//	}
+	//	for (int i = 0; i < N*N; i++, j++)
+	//	{
+	//		prob.x[k][j].index = j+1;
+	//		prob.x[k][j].value = models[0]->P_A[k*N*N + i];
+	//	}
+	//	for (int i = 0; i < N*M; i++, j++)
+	//	{
+	//		prob.x[k][j].index = j+1;
+	//		prob.x[k][j].value = models[0]->P_TAU[k*N*M + i];
+	//	}
+	//	for (int i = 0; i < Z*N*M; i++, j++)
+	//	{
+	//		prob.x[k][j].index = j+1;
+	//		prob.x[k][j].value = models[0]->P_MU[k*Z*N*M + i];
+	//	}
+	//	for (int i = 0; i < Z*Z*N*M; i++, j++)
+	//	{
+	//		prob.x[k][j].index = j+1;
+	//		prob.x[k][j].value = models[0]->P_SIG[k*Z*Z*N*M + i];
+	//	}
+	//}
+	//// second model
+	//for (int k = 0; k < K; k++)			// k - индекс последовательности наблюдений
+	//{
+	//	prob.x[K+k] = new svm_node[derivativesVectorSize];	// allocate memory for derivatives vector
+	//	int j = 0;		// указатель на положение в одном векторе производных
+	//	for (int i = 0; i < N; i++, j++)
+	//	{
+	//		prob.x[K+k][j].index = j + 1;
+	//		prob.x[K+k][j].value = models[1]->P_PI[k*N + i];
+	//	}
+	//	for (int i = 0; i < N*N; i++, j++)
+	//	{
+	//		prob.x[K+k][j].index = j + 1;
+	//		prob.x[K+k][j].value = models[1]->P_A[k*N*N + i];
+	//	}
+	//	for (int i = 0; i < N*M; i++, j++)
+	//	{
+	//		prob.x[K+k][j].index = j + 1;
+	//		prob.x[K+k][j].value = models[1]->P_TAU[k*N*M + i];
+	//	}
+	//	for (int i = 0; i < Z*N*M; i++, j++)
+	//	{
+	//		prob.x[K+k][j].index = j + 1;
+	//		prob.x[K+k][j].value = models[1]->P_MU[k*Z*N*M + i];
+	//	}
+	//	for (int i = 0; i < Z*Z*N*M; i++, j++)
+	//	{
+	//		prob.x[K+k][j].index = j + 1;
+	//		prob.x[K+k][j].value = models[1]->P_SIG[k*Z*Z*N*M + i];
+	//	}
+	//}
 
-	// set parameters
-	param.svm_type = C_SVC;
-	param.kernel_type = RBF;
-	param.degree = 3;
-	param.gamma = 0;	// 1/num_features
-	param.coef0 = 0;
-	param.nu = 0.5;
-	param.cache_size = 500;
-	param.C = 1;
-	param.eps = 1e-3;
-	param.p = 0.1;
-	param.shrinking = 1;
-	param.probability = 0;
-	param.nr_weight = 0;
-	param.weight_label = NULL;
-	param.weight = NULL;
+	//// set parameters
+	//param.svm_type = C_SVC;
+	//param.kernel_type = RBF;
+	//param.degree = 3;
+	//param.gamma = 0;	// 1/num_features
+	//param.coef0 = 0;
+	//param.nu = 0.5;
+	//param.cache_size = 500;
+	//param.C = 1;
+	//param.eps = 1e-3;
+	//param.p = 0.1;
+	//param.shrinking = 1;
+	//param.probability = 0;
+	//param.nr_weight = 0;
+	//param.weight_label = NULL;
+	//param.weight = NULL;
 
-	// Launch SVM here
-	std::cout << "Before train" << std::endl;
-	svm_model * model = svm_train(&prob, &param);
-	std::cout << "After train" << std::endl;
-	// End SVM here
-	
-	// after train
+	//// Launch SVM here
+	//std::cout << "Before train" << std::endl;
+	//svm_model * model = svm_train(&prob, &param);
+	//std::cout << "After train" << std::endl;
+	//// End SVM here
+	//
+	//// after train
 
-	// fill results
+	//// fill results
 
-	// delete temporary derivatives
-	delete d_PI_0;
-	delete d_A_0;
-	delete d_TAU_0;
-	delete d_MU_0;
-	delete d_SIG_0;
-	delete d_PI_1;
-	delete d_A_1;
-	delete d_TAU_1;
-	delete d_MU_1;
-	delete d_SIG_1;
+	//// delete temporary derivatives
+	//delete d_PI_0;
+	//delete d_A_0;
+	//delete d_TAU_0;
+	//delete d_MU_0;
+	//delete d_SIG_0;
+	//delete d_PI_1;
+	//delete d_A_1;
+	//delete d_TAU_1;
+	//delete d_MU_1;
+	//delete d_SIG_1;
 }
 
 void HMM::calcDerivatives(real_t * observations, int nOfSequences, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG)

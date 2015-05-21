@@ -40,6 +40,22 @@ typedef float real_t;
 //typedef double real_t;
 
 ///
+/// Параметры масштабирования
+///
+struct svm_scaling_parameters
+{
+	real_t lower;
+	real_t upper;
+	real_t * feature_min;
+	real_t * feature_max;
+	void clear()
+	{
+		delete feature_max;
+		delete feature_min;
+	}
+};
+
+///
 /// Класс: Скрытая Марковская Модель (Hidden Markov Model - HMM)
 ///
 class HMM
@@ -61,13 +77,19 @@ public:
 	void findModelParameters();					// нахождение параметров модели
 	void classifyWithLikelihood(real_t * p);	// классификация последовательностей наблюдений по ф-ии правдоподобия
 												// (p[k] - вероятностей того, что данная модель породила последовательность под номером k)
-	void learnWithDerivatives();				// обучение по методу производных
+	///
+	/// обучение по методу производных (пока что только две модели)
+	/// @in: observations - наблюдения, K - число последовательностей, models - конкурирующие модели, numModels - число моделей
+	/// @out: scalingParams - параметры, использованные при масштабировании производных перед обучением (передать пустую структуру)
+	/// @return: svmTrainedModel * - обученная SVM модель		
+	static svm_model * trainWithDerivatives(real_t ** observations, int K, HMM ** models, int numModels, svm_scaling_parameters & scalingParams);
+
 	///
 	/// классификация по методу производных
-	/// @in: Ok - наблюдения, K - число последовательностей, models - конкурирующие модели, numModels - число моделей
+	/// @in: observations - наблюдения, K - число последовательностей, svmTrainedModel - обученная SVM модель, scalingParams - параметры, использованные при масштабировании производных перед обучением
 	/// @out: r=results[k] - указывается индекс той модели, к которой была отнесена k-ое наблюдение, k=0..K-1, r=0..numModels-1
 	///
-	static void classifyWithDerivatives(real_t * Ok, int K, HMM ** models, int numModels, int * results);
+	static void classifyWithDerivatives(real_t * observations, int K, svm_model & svm_trained_model, svm_scaling_parameters & scalingParams, int * results);
 
 	// расчет и возврат производных для наблюдений извне
 	void calcDerivatives(real_t * observations, int nOfSequences, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG);
@@ -80,6 +102,8 @@ private:
 	real_t g(int t,int k,int i,int m,int n);
 	// нахождение вероятности генерации моделью наблюдений
 	real_t calcProbability();
+
+	
 	// расчет производных
 	void calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG);
 	// расчет внутренних производных

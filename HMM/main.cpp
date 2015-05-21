@@ -21,41 +21,6 @@ void classClassify(real_t * p1, real_t * p2, real_t &percent1, real_t &percent2,
 	percent2/=K;
 }
 
-void saveDerivativesToFile(HMM &model, std::string fileName)
-{
-	std::ofstream f;
-	int N = model.N, M = model.M, Z = model.Z, K = model.K;
-	f.open(fileName, std::fstream::out);
-	f << "Model" << std::endl;
-	for (int k = 0; k < K; k++)
-	{
-
-		f << "k = " << k << std::endl;
-		f << "PI " << std::endl;
-		for (int i = 0, size = N; i < size; i++)
-			f << model.P_PI[k*size + i] << " ";
-		f << std::endl;
-		f << "A " << std::endl;
-		for (int i = 0, size = N*N; i < size; i++)
-			f << model.P_A[k*size + i] << " ";
-		f << std::endl;
-		f << "TAU " << std::endl;
-		for (int i = 0, size = N*M; i < size; i++)
-			f << model.P_TAU[k*size + i] << " ";
-		f << std::endl;
-		f << "MU " << std::endl;
-		for (int i = 0, size = Z*N*M; i < size; i++)
-			f << model.P_MU[k*size + i] << " ";
-		f << std::endl;
-		f << "SIG " << std::endl;
-		for (int i = 0, size = Z*N*M; i < size; i++){
-			f << model.P_SIG[k*size + i] << " ";
-		}
-		f << std::endl;
-	}
-	f.close();
-}
-
 int main(void)
 {
 	/// таймер
@@ -121,46 +86,45 @@ int main(void)
 	///
 	/// Обучение с помощью производных
 	///
+	real_t * Olearn1 = new real_t[K * M1.T * M1.Z];
+	real_t * Olearn2 = new real_t[K * M2.T * M2.Z];
+	real_t * trainingObservations[2] = { Olearn1, Olearn2 };	// подготовим обучающие наблюдения
+	HMM * models[2] = { &M1, &M2 };						// подготовим массив моделей
+	M1.getObservations("model1\\Ok.txt", Olearn1);		// read learn observations for model 1
+	M2.getObservations("model2\\Ok.txt", Olearn2);		// read learn observations for model 2
+	svm_scaling_parameters scalingParameters;
+	QueryPerformanceCounter(&t1);				// start timer
+	svm_model * trainedModel = HMM::trainWithDerivatives(trainingObservations, K, models, 2, scalingParameters);
+	QueryPerformanceCounter(&t2);				// stop timer
+	elapsedTime += (1.0*t2.QuadPart - 1.0*t1.QuadPart) / (frequency.QuadPart*1.0);
 
-	M1.getObservations("model1\\Ok.txt");	// read observations for model 1
-	M2.getObservations("model2\\Ok.txt");	// read observations for model 2
-	M1.learnWithDerivatives();				// train model 1 with derivatives
-	M2.learnWithDerivatives();				// train model 2 with derivatives
+	printf("Derivatives learning complete\nElapsed time = %f s.\n", elapsedTime);
 
-	printf("Derivatives learning complete\n");
-
-	// DEBUG - lerning derivatives output for debugging means
-	saveDerivativesToFile(M1, "M1_learn_derivs.txt");
-	saveDerivativesToFile(M2, "M2_learn_derivs.txt");
 
 
 	///
 	/// Классификация с помощью производных
 	///
-	// загрузим тестовые последовательности в массивы Otest
-	real_t * Otest1 = new real_t[K * M1.T * M1.Z];
-	real_t * Otest2 = new real_t[K * M2.T * M2.Z];
-	M1.getObservations("model1\\Otest1.txt", Otest1);
-	M2.getObservations("model1\\Otest2.txt", Otest2);
-	// подготовим массив моделей
-	HMM * models[2] = {&M1, &M2};
+	// загрузим тестовые последовательности в массив Otest
+	real_t * Otest = new real_t[2* K * M1.T * M1.Z];
+	M1.getObservations("model1\\Otest1.txt", Otest);
+	M2.getObservations("model1\\Otest2.txt", &Otest[K*M1.T*M1.Z]);
+	
 	// подготовим массив результатов
-	int * results1 = new int[K];
-	int * results2 = new int[K];
-	HMM::classifyWithDerivatives(Otest1, K, models, 2, results1);	// первая тестовая последовательность 
-	HMM::classifyWithDerivatives(Otest2, K, models, 2, results2);	// вторая тестовая последовательность
+	int * results = new int[2*K];
+	//HMM::classifyWithDerivatives(Otest, 2*K, *trainedModel, scalingParameters, results); 
 
 	float percent = 0;
 	for (int k = 0; k < K; k++)
 	{
-		if (results1[k] == 0)
+		if (results[k] == 0)
 			percent += 1;
-		if (results1[k] == 1)
+		if (results[K+k] == 1)
 			percent += 1;
 	}
 	percent /= K*2.0;
 
-	printf("Derivatives classification complete\nPercent = %d", percent);
+	printf("Derivatives classification complete\nPercent = %d\n", percent);
 
 	return EXIT_SUCCESS;
 }
