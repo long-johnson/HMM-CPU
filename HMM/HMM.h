@@ -66,7 +66,7 @@ public:
 	int Z;					// размерность наблюдений
 	real_t *PI,*A,*TAU,*MU,*SIG,*MU1,*SIG1,*Otr,*A1,*PI1,*TAU1;		// массивы параметров и начальных приближений СММ, а также наблюдений
 	real_t *alf,*bet,*c,*ksi,*gam,*gamd,*alf_t,*bet_t,*B;			// массивы вспомогательных переменных
-	real_t *P_PI, *P_A, *P_TAU, *P_MU, *P_SIG;						// массивы производных по параметрам
+	//real_t *P_PI, *P_A, *P_TAU, *P_MU, *P_SIG;					// массивы производных по параметрам
 	real_t *cd, *alf_t_d, *alf_s_d, *alf1_PI, *alf1_MUSIG, *alf1_TAU,
 		*a_A, *b_MUSIG, *b_TAU, *dets, *alf1_zero, *a_zero, *b_zero;	// массивы вспомогательных производных
 
