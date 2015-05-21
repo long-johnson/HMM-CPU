@@ -36,13 +36,29 @@ HMM::HMM(std::string filename)
 	Otr = new real_t[T*Z*K];
 
 	// вспомогательные переменные
-	this->alf1_N = new real_t[N];
-	this->a_N = new real_t[N*N];
-	this->b_N = new real_t[N*T];
-	this->cd = new real_t[T];
-	this->alf_t_d = new real_t[T*N];
-	this->alf_s_d = new real_t[T*N];
+	this->alf1_zero = new real_t[N];
+	this->a_zero = new real_t[N*N];
+	this->b_zero = new real_t[N*T];
+	this->alf1_PI = new real_t[K*N*N];
+	this->alf1_MUSIG = new real_t[K*N*M*Z*N];
+	this->alf1_TAU = new real_t[K*N*M*N];
+	this->a_A = new real_t[K*N*N*N*N];
+	this->b_MUSIG = new real_t[K*N*M*Z*N*T];
+	this->b_TAU = new real_t[K*N*M*N*T];
 	this->dets = new real_t[K*N*M];
+
+	this->cd = new real_t[K*T];
+	this->alf_t_d = new real_t[K*T*N];
+	this->alf_s_d = new real_t[K*T*N];
+	
+
+	// заполним нулями вспомогательные нулевые массивы
+	for (int i = 0; i < N; i++)
+		this->alf1_zero[i] = 0;
+	for (int i = 0; i < N*N; i++)
+		this->a_zero[i] = 0;
+	for (int i = 0; i < N*T; i++)
+		this->b_zero[i] = 0;
 
 
 	f.open(filename+"PI1.txt",std::fstream::in);
@@ -235,7 +251,6 @@ real_t HMM::calcBaumWelсh(int n)
 	real_t p = 10;
 
 	bool F=true;
-	//vector<double> tmp3(Z);
 
 	int iter;
 	for(iter = 0; iter < MAX_ITER && abs(p - p_pred) > EPS_BAUM; iter++)
@@ -869,7 +884,6 @@ void HMM::calcDerivatives(real_t * observations, int nOfSequences, real_t * d_PI
 	internal_calculations(-1);
 
 	// calc derivative for each parameter and each sequence
-	//for (int k = 0; k<K; k++)
 	calc_derivatives_for_all_sequences(K, d_PI, d_A, d_TAU, d_MU, d_SIG);
 
 	Otr = old_Otr;
@@ -884,162 +898,180 @@ void HMM::calc_derivatives_for_all_sequences(int K, real_t * d_PI, real_t * d_A,
 #define d_MU(k,z,i,m) d_MU[(((k)*N+i)*M+m)*Z+z]
 #define d_SIG(k,z,i,m) d_SIG[(((k)*N+i)*M+m)*Z+z]
 #define dets(k,i,m) dets[((k)*N+i)*M+m]
+#define a_A(k,i,j,i1,j1) a_A[((((k)*N+i)*N+j)*N+i1)*N+j1]
+#define b_MUSIG(k,i,m,z,i1,t) b_MUSIG[(((((k)*N+i)*M+m)*Z+z)*N+i1)*T+t]
+#define	b_TAU(k, i, m, i1, t) b_TAU[((((k)*N+i)*M+m)*N+i1)*T+t]
+#define alf1_PI(k,i,j) alf1_PI[((k)*N+i)*N+j]
+#define alf1_MUSIG(k, i, m, z, i1) alf1_MUSIG[((((k)*N+i)*M+m)*Z+z)*N+i1]
+#define	alf1_TAU(k, i, m, i1) alf1_TAU[(((k)*N+i)*M+m)*N+i1]
 
-	//clear allocated memory
-	for (int i = 0; i < N*N; i++) a_N[i] = 0;
-	for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
 	// derivatives with respect to PI 
-	// kernel 4.1 KxN
+	// kernel 4.1.1 KxNxN
 	for (int k = 0; k < K; k++)
-	{
+		for (int i = 0; i < N; i++)
+			for (int j = 0; j < N; j++)
+				alf1_PI(k,i,j) = (j == i) ? B(i, 0, k) : 0;
+
+	// kernel 4.1.2 KxN
+	for (int k = 0; k < K; k++)
 		for (int i = 0; i < N; i++)
 		{
-			for (int j = 0; j < N; j++)
-				alf1_N[j] = (j == i) ? B(i, 0, k) : 0;
-			real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+			real_t temp = calc_alpha_der(k, &alf1_PI(k,i,0), a_zero, b_zero);
 			d_PI[k*N + i] = isfinite(temp) ? temp : 0.0;
 		}
-	}
 
-	// clear allocated memory
-	for (int i = 0; i < N; i++) alf1_N[i] = 0;
-	//for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
 	// derivatives with respect to A 
-	// kernel 4.2 (KxNxN)
+	// kernel 4.2.1 (KxNxNxNxN)
 	for (int k = 0; k < K; k++)
-	{		
 		for (int i = 0; i < N; i++)
-		{
 			for (int j = 0; j < N; j++)
-			{
 				for (int i1 = 0; i1 < N; i1++)
 					for (int j1 = 0; j1 < N; j1++)
-						a_N[i1*N + j1] = (i1 == i && j1 == j) ? 1 : 0;
-				real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+						a_A(k,i,j,i1,j1) = (i1 == i && j1 == j) ? 1 : 0;
+
+	// kernel 4.2.2 (KxNxN)
+	for (int k = 0; k < K; k++)	
+		for (int i = 0; i < N; i++)
+			for (int j = 0; j < N; j++)
+			{
+				real_t temp = calc_alpha_der(k, alf1_zero, &a_A(k,i,j,0,0), b_zero);
 				d_A(k, i, j) = isfinite(temp) ? temp : 0.0;
 			}
-		}
-	}
 
-	//clear allocated memory
-	for (int i = 0; i < N*N; i++) a_N[i] = 0;
 
 	// derivatives with respect to MU
-	// kernel 4.3 (KxNxMxZ)
+	// kernel 4.3.1 (KxNxMxZxNxT)
 	for (int k = 0; k < K; k++)
-	{
 		for (int i = 0; i < N; i++)
-		{
 			for (int m = 0; m < M; m++)
-			{
+				for (int z = 0; z < Z; z++)
+					for (int i1 = 0; i1 < N; i1++)
+						for (int t = 0; t < T; t++)
+							b_MUSIG(k,i,m,z,i1,t) = (i1 == i) ? 0.5 * TAU(i, m) * g(t, k, i, m, -1) * (Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m) : 0;
+
+	// kernel 4.3.2 (KxNxMxZxN)
+	for (int k = 0; k < K; k++)
+		for (int i = 0; i < N; i++)
+			for (int m = 0; m < M; m++)
+				for (int z = 0; z < Z; z++)
+					for (int i1 = 0; i1 < N; i1++)
+						alf1_MUSIG(k, i, m, z, i1) = PI[i] * b_MUSIG(k, i, m, z, i1, 0);
+
+	// kernel 4.3.3 (KxZxNxM)
+	for (int k = 0; k < K; k++)
+		for (int i = 0; i < N; i++)
+			for (int m = 0; m < M; m++)
 				for (int z = 0; z < Z; z++)
 				{
-					for (int i1 = 0; i1 < N; i1++)
-					{
-						for (int t = 0; t < T; t++)
-							b_N[i1*T + t] = (i1 == i) ? 0.5 * TAU(i, m) * g(t, k, i, m, -1) * (Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m) : 0;
-						alf1_N[i1] = PI[i] * b_N[i1*T + 0];
-					}
-					real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+					real_t temp = calc_alpha_der(k, &alf1_MUSIG(k, i, m, z, 0), a_zero, &b_MUSIG(k, i, m, z, 0, 0));
 					d_MU(k, z, i, m) = isfinite(temp) ? temp : 0.0;
 				}
-			}
-		}
-	}
 
 	// derivatives with respect to SIG
-	// kernel 4.4 (KxNxM)
+	// kernel 4.4.1 (KxNxM)
 	for (int k = 0; k < K; k++)
-	{
 		for (int i = 0; i < N; i++)
-		{
 			for (int m = 0; m < M; m++)
 			{
 				dets(k,i,m) = 1;
 				for (int z = 0; z < Z; z++)
 					dets(k,i,m) *= SIG(z, z, i, m);
 			}
-		}
-	}
+
+	// kernel 4.4.2 (KxNxMxZxN)
 	for (int k = 0; k < K; k++)
-	{
 		for (int i = 0; i < N; i++)
-		{
 			for (int m = 0; m < M; m++)
-			{
+				for (int z = 0; z < Z; z++)
+					for (int i1 = 0; i1 < N; i1++)
+						for (int t = 0; t < T; t++)
+							b_MUSIG(k, i, m, z, i1, t) = (i1 == i) ? TAU(i, m)*g(t, k, i, m, -1)*0.5* (pow((Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m), 2.0) - 1. / dets(k, i, m)) : 0;
+
+	// kernel 4.4.3 (KxNxMxZxN)
+	for (int k = 0; k < K; k++)
+		for (int i = 0; i < N; i++)
+			for (int m = 0; m < M; m++)
+				for (int z = 0; z < Z; z++)
+					for (int i1 = 0; i1 < N; i1++)
+						alf1_MUSIG(k, i, m, z, i1) = PI[i] * b_MUSIG(k, i, m, z, i1, 0);
+
+	// kernel 4.4.4 (KxZxNxM)
+	for (int k = 0; k < K; k++)
+		for (int i = 0; i < N; i++)
+			for (int m = 0; m < M; m++)
 				for (int z = 0; z < Z; z++)
 				{
-					for (int i1 = 0; i1 < N; i1++)
-					{
-						for (int t = 0; t < T; t++)
-							b_N[i1*T + t] = (i1 == i) ? TAU(i, m)*g(t, k, i, m, -1)*0.5* (pow((Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m), 2.0) - 1. / dets(k,i,m)) : 0;
-						alf1_N[i1] = PI[i] * b_N[i1*T + 0];
-					}
-					real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+					real_t temp = calc_alpha_der(k, &alf1_MUSIG(k, i, m, z, 0), a_zero, &b_MUSIG(k, i, m, z, 0, 0));
 					d_SIG(k, z, i, m) = isfinite(temp) ? temp : 0.0;
 				}
-			}
-		}
-	}
 
 	// derivatives with respect to TAU
-	// kernel 4.5 (KxNxM)
+	// kernel 4.5.1 (KxNxMxNxT)
 	for (int k = 0; k < K; k++)
-	{
 		for (int i = 0; i < N; i++)
-		{
+			for (int m = 0; m < M; m++)
+				for (int i1 = 0; i1 < N; i1++)
+					for (int t = 0; t < T; t++)									
+						b_TAU(k, i, m, i1, t) = (i1 == i) ? g(t, k, i, m, -1) : 0;	// fixed!
+
+	// kernel 4.5.2 (KxNxMxN)
+	for (int k = 0; k < K; k++)
+		for (int i = 0; i < N; i++)
+			for (int m = 0; m < M; m++)
+				for (int i1 = 0; i1 < N; i1++)
+					alf1_TAU(k, i, m, i1) = PI[i1] * b_TAU(k, i, m, i1, 0);			// fixed!
+
+
+	// kernel 4.5.3 (KxNxM)
+	for (int k = 0; k < K; k++)
+		for (int i = 0; i < N; i++)
 			for (int m = 0; m < M; m++)
 			{
-				for (int i1 = 0; i1 < N; i1++)
-				{
-					for (int t = 0; t < T; t++)									// fixed!
-						b_N[i1*T + t] = (i1 == i) ? g(t, k, i, m, -1) : 0;		// fixed!
-					alf1_N[i1] = PI[i1] * b_N[i1*T + 0];						// = PI[i1] * (i1 == i) ? g(0, k, i, m, -1) : 0;
-				}
-				real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+				real_t temp = calc_alpha_der(k, &alf1_TAU(k, i, m, 0), a_zero, &b_TAU(k, i, m, 0, 0));
 				d_TAU(k, i, m) = isfinite(temp) ? temp : 0.0;
 			}
-		}
-	}
 }
 
 real_t HMM::calc_alpha_der(int k, real_t * alf1_N, real_t * a_N, real_t * b_N)
 {
-	for (int i = 0; i < T; i++) cd[i] = 0;
-	for (int i = 0; i < T*N; i++) alf_t_d[i] = 0;
-	for (int i = 0; i < T*N; i++) alf_s_d[i] = 0;
 
+#define cd(k,t) cd[(k)*T+t]
+#define alf_t_d(k, t, i) alf_t_d[((k)*T+t)*N+i]
+#define alf_s_d(k, t, i) alf_s_d[((k)*T+t)*N+i]
+
+	cd(k, 0) = 0;
 	for (int i = 0; i<N; i++)
 	{
-		alf_t_d[0*N+i] = alf1_N[i];
-		cd[0] += alf_t_d[0*N+i];
+		alf_t_d(k,0,i) = alf1_N[i];
+		cd(k, 0) += alf_t_d(k, 0, i);
 	}
 
-	cd[0] = -c(0, k)*c(0, k)*cd[0];
+	cd(k, 0) = -c(0, k) * c(0, k) * cd(k, 0);
 	double sum1, sum2;
 	for (int t = 1; t<T; t++)
 	{
+		cd(k, t) = 0;
 		for (int i = 0; i<N; i++)
-			alf_s_d[(t - 1)*N+i] = cd[t - 1] * alf_t(t - 1, i, k) + alf_t_d[(t - 1)*N+i] * c(t - 1, k);
+			alf_s_d(k,t-1, i) = cd(k, t-1) * alf_t(t - 1, i, k) + alf_t_d(k ,t-1, i) * c(t-1, k);
 		for (int i = 0; i<N; i++)
 		{
 			sum1 = sum2 = 0;
 			for (int j = 0; j<N; j++)
 			{
-				sum1 += alf_s_d[(t - 1)*N+i] * A(j, i) + alf(t - 1, j, k)*a_N[j*N+i];
-				sum2 += alf(t - 1, j, k)*A(j, i);
+				sum1 += alf_s_d(k, t-1, i) * A(j, i) + alf(t - 1, j, k) * a_N[j*N+i];
+				sum2 += alf(t - 1, j, k) * A(j, i);
 			}
-			alf_t_d[t*N+i] = sum1*B(i, t, k) + sum2*b_N[i*T+t];
-			cd[t] += alf_t_d[t*N+i];
+			alf_t_d(k, t, i) = sum1 * B(i, t, k) + sum2 * b_N[i*T+t];
+			cd(k, t) += alf_t_d(k, t, i);
 		}
-		cd[t] = -c(t, k)*c(t, k)*cd[t];
+		cd(k, t) = -c(t, k) * c(t, k) * cd(k,t);
 	}
 
 	double deriv = 0;
 	for (int t = 0; t<T; t++)
-		deriv += cd[t] / c(t, k);
+		deriv += cd(k, t) / c(t, k);
 	return deriv;
 }
 
