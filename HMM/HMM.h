@@ -104,8 +104,8 @@ private:
 	real_t calcProbability();
 
 	
-	// расчет производных
-	void calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG);
+	// расчет производных для всех последовательностей
+	void calc_derivatives_for_all_sequences(int K, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG);
 	// расчет внутренних производных
 	real_t calc_alpha_der(int k, real_t * alf1, real_t * a, real_t * b);
 };

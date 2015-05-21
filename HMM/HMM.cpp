@@ -42,7 +42,7 @@ HMM::HMM(std::string filename)
 	this->cd = new real_t[T];
 	this->alf_t_d = new real_t[T*N];
 	this->alf_s_d = new real_t[T*N];
-	this->dets = new real_t[N*M];
+	this->dets = new real_t[K*N*M];
 
 
 	f.open(filename+"PI1.txt",std::fstream::in);
@@ -847,112 +847,162 @@ svm_model * HMM::trainWithDerivatives(real_t ** observations, int K, HMM ** mode
 	models[1]->calcDerivatives(observations[1], K, &d_PI[1][K*N], &d_A[1][K*N*N], &d_TAU[1][K*N*M], &d_MU[1][K*Z*N*M], &d_SIG[1][K*Z*N*M]);
 
 	// debug
-	//saveDerivativesToFile("M1_train_derivs.txt", N, M, Z, K, d_PI[0], d_A[0], d_TAU[0], d_MU[0], d_SIG[0]);
-	//saveDerivativesToFile("M2_train_derivs.txt", N, M, Z, K, d_PI[1], d_A[1], d_TAU[1], d_MU[1], d_SIG[1]);
+	saveDerivativesToFile("M1_train_derivs.txt", N, M, Z, K, d_PI[0], d_A[0], d_TAU[0], d_MU[0], d_SIG[0]);
+	saveDerivativesToFile("M2_train_derivs.txt", N, M, Z, K, d_PI[1], d_A[1], d_TAU[1], d_MU[1], d_SIG[1]);
 	// debug
 
 	// SVM training
 	svm_model model;
+
+	// TODO: free memory
 	return &model;
 }
 
-void HMM::calc_derivative(int k, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG)
+void HMM::calcDerivatives(real_t * observations, int nOfSequences, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG)
+{
+	real_t * old_Otr = Otr;
+	int old_K = K;
+	Otr = observations;
+	K = nOfSequences;
+
+	// carry out some internal calculations 
+	internal_calculations(-1);
+
+	// calc derivative for each parameter and each sequence
+	//for (int k = 0; k<K; k++)
+	calc_derivatives_for_all_sequences(K, d_PI, d_A, d_TAU, d_MU, d_SIG);
+
+	Otr = old_Otr;
+	K = old_K;
+}
+
+void HMM::calc_derivatives_for_all_sequences(int K, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG)
 {
 
 #define d_A(k,i,j) d_A[((k)*N+i)*N+j]
 #define d_TAU(k,i,m) d_TAU[((k)*N+i)*M+m]
 #define d_MU(k,z,i,m) d_MU[(((k)*N+i)*M+m)*Z+z]
 #define d_SIG(k,z,i,m) d_SIG[(((k)*N+i)*M+m)*Z+z]
+#define dets(k,i,m) dets[((k)*N+i)*M+m]
 
 	//clear allocated memory
-	//for (int i = 0; i < N; i++) alf1_N[i] = 0;
 	for (int i = 0; i < N*N; i++) a_N[i] = 0;
 	for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
-	//производные по PI
-	for (int i = 0; i<N; i++)
+	// derivatives with respect to PI 
+	// kernel 4.1 KxN
+	for (int k = 0; k < K; k++)
 	{
-		for (int j = 0; j<N; j++)
-			alf1_N[j] = (j == i) ? B(i, 0, k) : 0;	//ALF1_PI(j,i);
-		//a=0;b=0;		
-		real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
-		d_PI[k*N+i] = isfinite(temp) ? temp : 0.0;
+		for (int i = 0; i < N; i++)
+		{
+			for (int j = 0; j < N; j++)
+				alf1_N[j] = (j == i) ? B(i, 0, k) : 0;
+			real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+			d_PI[k*N + i] = isfinite(temp) ? temp : 0.0;
+		}
+	}
+
+	// clear allocated memory
+	for (int i = 0; i < N; i++) alf1_N[i] = 0;
+	//for (int i = 0; i < N*T; i++) b_N[i] = 0;
+
+	// derivatives with respect to A 
+	// kernel 4.2 (KxNxN)
+	for (int k = 0; k < K; k++)
+	{		
+		for (int i = 0; i < N; i++)
+		{
+			for (int j = 0; j < N; j++)
+			{
+				for (int i1 = 0; i1 < N; i1++)
+					for (int j1 = 0; j1 < N; j1++)
+						a_N[i1*N + j1] = (i1 == i && j1 == j) ? 1 : 0;
+				real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+				d_A(k, i, j) = isfinite(temp) ? temp : 0.0;
+			}
+		}
 	}
 
 	//clear allocated memory
-	for (int i = 0; i < N; i++) alf1_N[i] = 0;
-	//for (int i = 0; i < N*N; i++) a_N[i] = 0;
-	for (int i = 0; i < N*T; i++) b_N[i] = 0;
-
-	//производные по A
-	for (int i = 0; i<N; i++)
-		for (int j = 0; j<N; j++)
-		{
-			for (int i1 = 0; i1<N; i1++)
-				for (int j1 = 0; j1<N; j1++)
-					a_N[i1*N + j1] = (i1 == i && j1 == j) ? 1 : 0;
-			real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
-			d_A(k, i, j) = isfinite(temp) ? temp : 0.0;
-		}
-
-
-	//clear allocated memory
-	//for (int i = 0; i < N; i++) alf1_N[i] = 0;
 	for (int i = 0; i < N*N; i++) a_N[i] = 0;
-	//for (int i = 0; i < N*T; i++) b_N[i] = 0;
 
-	//производные по MU и SIG
-	for (int i = 0; i<N; i++)
-		for (int m = 0; m<M; m++)
+	// derivatives with respect to MU
+	// kernel 4.3 (KxNxMxZ)
+	for (int k = 0; k < K; k++)
+	{
+		for (int i = 0; i < N; i++)
 		{
-			dets[i*M + m] = 1;
-			for (int z = 0; z<Z; z++)
-				dets[i*M + m] *= SIG(z, z, i, m);
-		}
-
-	for (int i = 0; i<N; i++)
-		for (int m = 0; m<M; m++)
-			for (int z = 0; z<Z; z++)
+			for (int m = 0; m < M; m++)
 			{
-				for (int i1 = 0; i1<N; i1++)
+				for (int z = 0; z < Z; z++)
 				{
-					for (int t = 0; t<T; t++)
-						b_N[i1*T + t] = (i1 == i) ? 0.5 * TAU(i, m) * g(t, k, i, m, -1) * (Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m) : 0;
-					alf1_N[i1] = PI[i] * b_N[i1*T + 0];
+					for (int i1 = 0; i1 < N; i1++)
+					{
+						for (int t = 0; t < T; t++)
+							b_N[i1*T + t] = (i1 == i) ? 0.5 * TAU(i, m) * g(t, k, i, m, -1) * (Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m) : 0;
+						alf1_N[i1] = PI[i] * b_N[i1*T + 0];
+					}
+					real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+					d_MU(k, z, i, m) = isfinite(temp) ? temp : 0.0;
+				}
+			}
+		}
+	}
+
+	// derivatives with respect to SIG
+	// kernel 4.4 (KxNxM)
+	for (int k = 0; k < K; k++)
+	{
+		for (int i = 0; i < N; i++)
+		{
+			for (int m = 0; m < M; m++)
+			{
+				dets(k,i,m) = 1;
+				for (int z = 0; z < Z; z++)
+					dets(k,i,m) *= SIG(z, z, i, m);
+			}
+		}
+	}
+	for (int k = 0; k < K; k++)
+	{
+		for (int i = 0; i < N; i++)
+		{
+			for (int m = 0; m < M; m++)
+			{
+				for (int z = 0; z < Z; z++)
+				{
+					for (int i1 = 0; i1 < N; i1++)
+					{
+						for (int t = 0; t < T; t++)
+							b_N[i1*T + t] = (i1 == i) ? TAU(i, m)*g(t, k, i, m, -1)*0.5* (pow((Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m), 2.0) - 1. / dets(k,i,m)) : 0;
+						alf1_N[i1] = PI[i] * b_N[i1*T + 0];
+					}
+					real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
+					d_SIG(k, z, i, m) = isfinite(temp) ? temp : 0.0;
+				}
+			}
+		}
+	}
+
+	// derivatives with respect to TAU
+	// kernel 4.5 (KxNxM)
+	for (int k = 0; k < K; k++)
+	{
+		for (int i = 0; i < N; i++)
+		{
+			for (int m = 0; m < M; m++)
+			{
+				for (int i1 = 0; i1 < N; i1++)
+				{
+					for (int t = 0; t < T; t++)									// fixed!
+						b_N[i1*T + t] = (i1 == i) ? g(t, k, i, m, -1) : 0;		// fixed!
+					alf1_N[i1] = PI[i1] * b_N[i1*T + 0];						// = PI[i1] * (i1 == i) ? g(0, k, i, m, -1) : 0;
 				}
 				real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
-				d_MU(k, z, i, m) = isfinite(temp) ? temp : 0.0;
-
-				for (int i1 = 0; i1<N; i1++)
-				{
-					for (int t = 0; t<T; t++)
-						b_N[i1*T + t] = (i1 == i) ? TAU(i, m)*g(t, k, i, m, -1)*0.5* (pow((Otr(k, t, z) - MU(z, i, m)) / SIG(z, z, i, m), 2.0) - 1. / dets[i*M + m]) : 0;
-					alf1_N[i1] = PI[i] * b_N[i1*T + 0];
-				}
-				temp = calc_alpha_der(k, alf1_N, a_N, b_N);
-				d_SIG(k, z, i, m) = isfinite(temp) ? temp : 0.0;
+				d_TAU(k, i, m) = isfinite(temp) ? temp : 0.0;
 			}
-
-	//clear allocated memory
-	//for (int i = 0; i < N; i++) alf1_N[i] = 0;
-	//for (int i = 0; i < N*N; i++) a_N[i] = 0;
-	//for (int i = 0; i < N*T; i++) b_N[i] = 0;
-
-	//производные по TAU		
-	for (int i = 0; i<N; i++)
-		for (int m = 0; m<M; m++)
-		{
-			for (int i1 = 0; i1<N; i1++)
-			{
-				for (int t = 0; t<T; t++)									// fixed!
-					b_N[i1*T + t] = (i1 == i) ? g(t, k, i, m, -1) : 0;		// fixed!
-				alf1_N[i1] = PI[i1] * ((i1 == i) ? g(0, k, i, m, -1) : 0);	//b[i1][0];
-			}
-			real_t temp = calc_alpha_der(k, alf1_N, a_N, b_N);
-			d_TAU(k, i, m) = isfinite(temp) ? temp : 0.0;
 		}
-
-	
+	}
 }
 
 real_t HMM::calc_alpha_der(int k, real_t * alf1_N, real_t * a_N, real_t * b_N)
@@ -961,12 +1011,12 @@ real_t HMM::calc_alpha_der(int k, real_t * alf1_N, real_t * a_N, real_t * b_N)
 	for (int i = 0; i < T*N; i++) alf_t_d[i] = 0;
 	for (int i = 0; i < T*N; i++) alf_s_d[i] = 0;
 
-
 	for (int i = 0; i<N; i++)
 	{
 		alf_t_d[0*N+i] = alf1_N[i];
 		cd[0] += alf_t_d[0*N+i];
 	}
+
 	cd[0] = -c(0, k)*c(0, k)*cd[0];
 	double sum1, sum2;
 	for (int t = 1; t<T; t++)
@@ -986,11 +1036,11 @@ real_t HMM::calc_alpha_der(int k, real_t * alf1_N, real_t * a_N, real_t * b_N)
 		}
 		cd[t] = -c(t, k)*c(t, k)*cd[t];
 	}
+
 	double deriv = 0;
 	for (int t = 0; t<T; t++)
 		deriv += cd[t] / c(t, k);
 	return deriv;
-
 }
 
 void HMM::classifyWithDerivatives(real_t * observations, int K, svm_model & svm_trained_model, svm_scaling_parameters & scalingParams, int * results)
@@ -1138,20 +1188,3 @@ void HMM::classifyWithDerivatives(real_t * observations, int K, svm_model & svm_
 	//delete d_SIG_1;
 }
 
-void HMM::calcDerivatives(real_t * observations, int nOfSequences, real_t * d_PI, real_t * d_A, real_t * d_TAU, real_t * d_MU, real_t * d_SIG)
-{
-	real_t * old_Otr = Otr;
-	int old_K = K;
-	Otr = observations;
-	K = nOfSequences;
-
-	// carry out some internal calculations 
-	internal_calculations(-1);
-
-	// calc derivative for each parameter and each sequence
-	for (int k = 0; k<K; k++)
-		calc_derivative(k, d_PI, d_A, d_TAU, d_MU, d_SIG);
-
-	Otr = old_Otr;
-	K = old_K;
-}
